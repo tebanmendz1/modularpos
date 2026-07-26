@@ -1,0 +1,341 @@
+export enum PlanType {
+  BASICO = "Básico",
+  PROFESIONAL = "Profesional",
+  EMPRESARIAL = "Empresarial"
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  rnc?: string;
+  plan: PlanType;
+  logo: string; // Lucide icon name
+  color: string; // Tailwind hex or class name
+  activeModules: string[]; // List of module IDs
+  maxBranches: number;
+  maxUsers: number;
+  maxDevices: number;
+  settings: {
+    allowOutOfStock: boolean;
+    requireCustomer: boolean;
+    defaultTaxRate: number; // e.g. 0.18 for ITBIS
+    receiptMessage: string;
+    currency: string;
+  };
+}
+
+export interface Branch {
+  id: string;
+  companyId: string;
+  name: string;
+  address: string;
+}
+
+export interface Warehouse {
+  id: string;
+  branchId: string;
+  name: string;
+}
+
+export interface User {
+  id: string;
+  companyId: string;
+  name: string;
+  email: string;
+  role: string; // Propietario, Administrador, Supervisor, Cajero, etc.
+  pin: string; // PIN for offline / quick actions
+  permissions: string[]; // Granular permissions
+  restrictedBranches?: string[]; // Empty means all
+}
+
+export interface Product {
+  id: string;
+  companyId: string;
+  name: string;
+  sku: string;
+  barcode: string;
+  category: string;
+  price: number;
+  cost: number;
+  unit: string; // Unidades, Lb, Kg, etc.
+  stock: Record<string, number>; // warehouseId -> quantity
+  minStock: number;
+  maxStock: number;
+  isWeighable: boolean;
+  isSerialized: boolean;
+  image?: string; // Base64 data URL or image path uploaded by user
+  variants?: { name: string; options: string[] }[];
+}
+
+export interface SaleItem {
+  productId: string;
+  productName: string;
+  price: number;
+  cost: number;
+  qty: number;
+  discount: number; // percentage
+  tax: number; // percentage
+  selectedVariant?: string;
+}
+
+export interface Sale {
+  id: string; // local UUID
+  uuid: string; // server UUID or synced ID
+  companyId: string;
+  branchId: string;
+  userId: string;
+  date: string;
+  items: SaleItem[];
+  subtotal?: number;
+  total: number;
+  discount: number; // absolute
+  tax: number; // absolute
+  tip?: number; // absolute
+  paymentMethod: string; // Efectivo, Tarjeta, Crédito, Transferencia, Dividido
+  paymentDetails?: {
+    cashPaid?: number;
+    change?: number;
+    cardLast4?: string;
+    split?: Record<string, number>;
+  };
+  status: 'completed' | 'suspended' | 'cancelled';
+  ncf?: string;
+  ncfType?: string;
+  customerId?: string;
+  customerName?: string;
+  customerRnc?: string;
+  notes?: string;
+  synced: boolean;
+  syncError?: string;
+}
+
+export interface AuditLog {
+  id: string;
+  companyId: string;
+  userId: string;
+  userName: string;
+  role: string;
+  date: string;
+  action: string;
+  details: string;
+  previousValue?: string;
+  newValue?: string;
+  branchId?: string;
+  synced: boolean;
+}
+
+export interface CashSession {
+  id: string;
+  companyId: string;
+  branchId: string;
+  userId: string;
+  userName: string;
+  openDate: string;
+  closeDate?: string;
+  initialFund: number;
+  cashIn: number; // extra deposits
+  cashOut: number; // payments / withdrawals
+  closedFund?: number;
+  expectedFund?: number;
+  status: 'open' | 'closed';
+  synced: boolean;
+}
+
+export interface Customer {
+  id: string;
+  companyId: string;
+  name: string;
+  phone: string;
+  email: string;
+  rncOrCedula?: string;
+  points: number;
+  tier: 'Bronce' | 'Plata' | 'Oro';
+  creditLimit: number;
+  currentDebt: number;
+  synced: boolean;
+}
+
+export interface Supplier {
+  id: string;
+  companyId: string;
+  name: string;
+  contact: string;
+  phone: string;
+  email: string;
+}
+
+export interface PurchaseOrderItem {
+  productId: string;
+  qty: number;
+  cost: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  companyId: string;
+  supplierId: string;
+  supplierName: string;
+  date: string;
+  items: PurchaseOrderItem[];
+  total: number;
+  status: 'draft' | 'ordered' | 'received';
+  receivedDate?: string;
+}
+
+export interface Expense {
+  id: string;
+  companyId: string;
+  branchId: string;
+  category: string;
+  amount: number;
+  date: string;
+  description: string;
+  paymentMethod: string;
+  approvedBy?: string;
+}
+
+export interface RestaurantTable {
+  id: string;
+  name: string;
+  zone: string; // Salón, Terraza, VIP
+  status: 'free' | 'occupied' | 'billing';
+  seats: number;
+  currentOrderId?: string; // suspended sale ID
+  waiterId?: string;
+}
+
+export interface RecipeIngredient {
+  rawMaterialId: string; // product ID (e.g. flour)
+  qty: number; // e.g. 0.25 (kg)
+}
+
+export interface Recipe {
+  id: string;
+  companyId: string;
+  name: string;
+  finishedProductId: string;
+  ingredients: RecipeIngredient[];
+}
+
+export interface Employee {
+  id: string;
+  companyId: string;
+  name: string;
+  role: string;
+  commissionRate: number; // percentage (e.g. 0.05 for 5%)
+  hourlyRate: number;
+  clockedIn: boolean;
+  lastClockIn?: string;
+  // Professional HR fields
+  documentId?: string; // Cédula/RNC/DNI
+  email?: string;
+  phone?: string;
+  department?: string; // Ventas, Operaciones, Administración, Logística, Cocina
+  contractType?: 'Fijo' | 'Temporal' | 'Por Hora' | 'Servicios';
+  monthlySalary?: number;
+  bankName?: string;
+  bankAccount?: string;
+  tssAfiliacion?: string; // NSS
+  status?: 'active' | 'vacation' | 'leave' | 'terminated';
+  hireDate?: string;
+}
+
+export interface Payslip {
+  id: string;
+  payrollPeriodId: string;
+  companyId: string;
+  employeeId: string;
+  employeeName: string;
+  employeeDocument: string;
+  department: string;
+  role: string;
+  bankName: string;
+  bankAccount: string;
+  paymentDate: string;
+  periodLabel: string; // e.g. "1ra Quincena Julio 2026"
+  // Earnings
+  baseSalary: number;
+  overtimeHours: number;
+  overtimePay: number;
+  commissions: number;
+  bonuses: number;
+  grossPay: number;
+  // Employee Deductions
+  sfsWorker: number; // 3.04%
+  afpWorker: number; // 2.87%
+  isrWorker: number; // Retención ISR
+  advances: number;  // Avances / Préstamos
+  totalDeductions: number;
+  netPay: number;
+  // Employer Contributions
+  sfsEmployer: number; // 7.09%
+  afpEmployer: number; // 7.10%
+  arlEmployer: number; // 1.10%
+  infotepEmployer: number; // 1.00%
+  status: 'draft' | 'approved' | 'paid';
+}
+
+export interface VacationLeaveRecord {
+  id: string;
+  companyId: string;
+  employeeId: string;
+  employeeName: string;
+  type: 'Vacaciones' | 'Licencia Médica' | 'Permiso Personal' | 'Maternidad/Paternidad';
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: 'Pendiente' | 'Aprobado' | 'Rechazado';
+  notes?: string;
+}
+
+export interface EmployeeLoan {
+  id: string;
+  companyId: string;
+  employeeId: string;
+  employeeName: string;
+  requestDate: string;
+  amount: number;
+  remainingAmount: number;
+  installments: number;
+  monthlyDeduction: number;
+  status: 'Activo' | 'Pagado';
+}
+
+export interface SyncQueueItem {
+  id: string;
+  type: 'sale' | 'stock_adjust' | 'customer' | 'cash_session' | 'audit';
+  companyId: string;
+  data: any;
+  timestamp: number;
+}
+
+export interface Account {
+  id: string;
+  companyId: string;
+  code: string;
+  name: string;
+  type: 'Activo' | 'Pasivo' | 'Capital' | 'Ingreso' | 'Costo' | 'Gasto';
+  balance: number;
+  isSubaccount: boolean;
+  parentCode?: string;
+}
+
+export interface JournalEntryLine {
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+}
+
+export interface JournalEntry {
+  id: string;
+  companyId: string;
+  branchId: string;
+  entryNumber: string;
+  date: string;
+  concept: string;
+  status: 'posted' | 'draft';
+  createdBy: string;
+  lines: JournalEntryLine[];
+}

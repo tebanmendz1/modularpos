@@ -1,0 +1,8 @@
+{
+  "name": "FacturaPOS Cloud",
+  "description": "Sistema de Punto de Venta (POS) modular, multiempresa y sincronizado en la nube con soporte offline, facturación fiscal NCF/e-CF y control estricto de caja.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
