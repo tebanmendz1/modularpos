@@ -87,20 +87,25 @@ export default function SubscriptionsModule({
   const companyCustomers = customers.filter(c => c.companyId === activeCompany.id);
 
   // Add / Assign Subscription
+  const [subNoticeMsg, setSubNoticeMsg] = useState<string>("");
+  const [showSubNoticeModal, setShowSubNoticeModal] = useState<boolean>(false);
+
   const handleAssignSubscription = (e: React.FormEvent) => {
     e.preventDefault();
     const cust = companyCustomers.find(c => c.id === selectedCustomerId);
     const plan = plans.find(p => p.id === selectedPlanId);
 
     if (!cust || !plan) {
-      alert("Por favor seleccione un cliente y un plan.");
+      setSubNoticeMsg("Por favor seleccione un cliente y un plan de membresía.");
+      setShowSubNoticeModal(true);
       return;
     }
 
     // Check if duplicate subscription
     const alreadySubbed = subscriptions.some(s => s.customerId === cust.id && s.status === "active");
     if (alreadySubbed) {
-      alert("Este cliente ya posee una membresía activa actualmente.");
+      setSubNoticeMsg("Este cliente ya posee una membresía activa actualmente.");
+      setShowSubNoticeModal(true);
       return;
     }
 
@@ -131,8 +136,10 @@ export default function SubscriptionsModule({
 
     setSelectedCustomerId("");
     setShowAssignModal(false);
-    alert(`Membresía "${plan.name}" asignada correctamente a ${cust.name}.`);
+    setSubNoticeMsg(`¡Membresía "${plan.name}" asignada correctamente a ${cust.name}!`);
+    setShowSubNoticeModal(true);
   };
+
 
   // Toggle Pause/Play status
   const handleToggleStatus = (subId: string) => {
@@ -209,8 +216,10 @@ export default function SubscriptionsModule({
       `Membresía de ${sub.customerName} renovada. Factura POS cobrada por $${mockSale.total.toFixed(2)}.`
     );
 
-    alert(`Membresía de ${sub.customerName} renovada con éxito. Factura POS emitida.`);
+    setSubNoticeMsg(`¡Membresía de ${sub.customerName} renovada con éxito! Factura POS emitida.`);
+    setShowSubNoticeModal(true);
   };
+
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50" id="subscriptions-root">
@@ -420,6 +429,26 @@ export default function SubscriptionsModule({
         </div>
       )}
 
+      {/* NOTICE OVERLAY MODAL */}
+      {showSubNoticeModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-fadeIn text-white text-center">
+            <div className="w-12 h-12 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-2xl flex items-center justify-center mx-auto">
+              <Award className="w-6 h-6" />
+            </div>
+            <h3 className="font-extrabold text-white text-base">Suscripciones</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">{subNoticeMsg}</p>
+            <button
+              type="button"
+              onClick={() => setShowSubNoticeModal(false)}
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 cursor-pointer"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

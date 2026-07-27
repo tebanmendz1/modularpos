@@ -3,8 +3,9 @@ import {
   Coffee, Layers, Users, PlusCircle, Receipt, Trash2, 
   ArrowRight, Play, CheckSquare, Clock, Printer, Split, 
   Coins, Ban, Edit2, Plus, Minus, UserCheck, CheckCircle2, 
-  X, Settings, ShoppingBag, CreditCard 
+  X, Settings, ShoppingBag, CreditCard, UtensilsCrossed 
 } from "lucide-react";
+
 import { Customer } from "../types";
 
 interface RestaurantModuleProps {
@@ -85,11 +86,18 @@ export default function RestaurantModule({
     ? restaurantTables 
     : restaurantTables.filter(t => getTableArea(t) === selectedAreaFilter);
 
+  // Restaurant Modal Notice States
+  const [restNoticeMsg, setRestNoticeMsg] = useState<string>("");
+  const [showRestNoticeModal, setShowRestNoticeModal] = useState<boolean>(false);
+  const [deletingTableId, setDeletingTableId] = useState<string | null>(null);
+
   // Add Table Form Submit
   const handleAddTableSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!newTableName.trim()) {
-      alert("Por favor ingrese el nombre o número de la mesa.");
+      setRestNoticeMsg("Por favor ingrese el nombre o número de la mesa.");
+      setShowRestNoticeModal(true);
       return;
     }
     const areaToAssign = newTableArea.trim() || "Salón Principal";
@@ -122,7 +130,8 @@ export default function RestaurantModule({
   const handleAddAreaSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAreaName.trim()) {
-      alert("Por favor ingrese el nombre del salón o área.");
+      setRestNoticeMsg("Por favor ingrese el nombre del salón o área.");
+      setShowRestNoticeModal(true);
       return;
     }
     const nameClean = newAreaName.trim();
@@ -144,18 +153,24 @@ export default function RestaurantModule({
     const targetTable = restaurantTables.find(t => t.id === tableId);
     if (!targetTable) return;
     if (targetTable.status !== "free") {
-      alert("No se puede eliminar una mesa ocupada o con consumos activos. Primero liquide o cancele la comanda.");
+      setRestNoticeMsg("No se puede eliminar una mesa ocupada o con consumos activos. Primero liquide o cancele la comanda.");
+      setShowRestNoticeModal(true);
       return;
     }
-    if (!confirm(`¿Está seguro de eliminar la mesa "${targetTable.tableName}"?`)) {
-      return;
-    }
+    setDeletingTableId(tableId);
+  };
+
+  const confirmDeleteTable = (tableId: string) => {
+    const targetTable = restaurantTables.find(t => t.id === tableId);
+    if (!targetTable) return;
     const updated = restaurantTables.filter(t => t.id !== tableId);
     onUpdateTables(updated);
     onAddAudit("Mesas & Salones", `Mesa eliminada del mapa: "${targetTable.tableName}"`);
     setSelectedTableId(null);
     setActiveModal(null);
+    setDeletingTableId(null);
   };
+
 
   // Fiscal Comprobante states for Cobro
   const [applyFiscal, setApplyFiscal] = useState(false);
@@ -196,25 +211,36 @@ export default function RestaurantModule({
   // Customer selection for CXC
   const [cxcCustomerId, setCxcCustomerId] = useState("");
 
-  // Specialized thermal printing helper for completed sale receipts
+  // Specialized thermal printing helper
   const handlePrintCompletedReceipt = () => {
-    const printContent = document.getElementById("completed-thermal-receipt-body")?.innerHTML;
+    const printContent = document.getElementById("restaurant-thermal-receipt")?.innerHTML;
     if (!printContent) return;
 
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(`
+    let iframe = document.getElementById("silent-print-iframe") as HTMLIFrameElement | null;
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "silent-print-iframe";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+    }
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
         <html>
           <head>
             <title>Recibo de Pago - Transacción ${completedSaleData?.id || ""}</title>
             <style>
-              @page {
-                size: 80mm auto;
-                margin: 0;
-              }
-              /* Use system-ui sans-serif font and solid black color to avoid blurry dithered printing on thermal paper */
+              @page { size: 80mm auto; margin: 0; }
               body {
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
                 width: 76mm;
                 margin: 0 auto;
                 padding: 10px 4px;
@@ -222,8 +248,6 @@ export default function RestaurantModule({
                 line-height: 1.5;
                 color: #000;
                 background-color: #fff;
-                -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
               }
               .text-center { text-align: center; }
               .text-right { text-align: right; }
@@ -244,40 +268,19 @@ export default function RestaurantModule({
               .pl-3 { padding-left: 12px; }
               .text-xs { font-size: 11px; }
               .text-sm { font-size: 14px; }
-              .text-emerald-950 { color: #000; font-weight: bold; }
-              .bg-emerald-50\\/50 { background-color: #fff; border: 1px solid #000; padding: 6px; margin: 4px 0; }
-              .bg-indigo-50\\/50 { background-color: #fff; border: 1px solid #000; padding: 6px; }
-              /* Force all text elements to solid black for maximum contrast and sharpness */
-              .text-slate-800, .text-slate-700, .text-slate-600, .text-slate-500, .text-slate-400, .text-indigo-900, .text-indigo-950, .text-emerald-800, .text-emerald-700 {
-                color: #000 !important;
-              }
-              .border-slate-100, .border-slate-200, .border-slate-400, .border-emerald-100, .border-indigo-100 {
-                border-color: #000 !important;
-              }
-              .font-mono { 
-                font-family: Consolas, "SF Mono", Monaco, "Courier New", monospace; 
-                font-weight: bold; 
-              }
-              @media print {
-                body { width: 76mm; margin: 0; padding: 10px 4px; }
-              }
+              .font-mono { font-family: monospace; font-weight: bold; }
             </style>
           </head>
-          <body>
-            ${printContent}
-            <script>
-              window.onload = function() {
-                window.print();
-                setTimeout(function() { window.close(); }, 500);
-              };
-            </script>
-          </body>
+          <body>${printContent}</body>
         </html>
       `);
-      printWindow.document.close();
-    } else {
-      alert("La ventana emergente de impresión fue bloqueada por el navegador. Habilitación requerida para imprimir tickets automáticamente, o use el botón secundario.");
-      window.print();
+      doc.close();
+      setTimeout(() => {
+        if (iframe?.contentWindow) {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        }
+      }, 150);
     }
   };
 
@@ -2205,6 +2208,49 @@ export default function RestaurantModule({
         </div>
       )}
 
+      {/* RESTAURANT NOTICE MODAL */}
+      {showRestNoticeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[100] p-4">
+          <div className="bg-slate-900 text-white rounded-3xl border border-slate-800 shadow-2xl max-w-sm w-full p-6 text-center space-y-4">
+            <div className="w-12 h-12 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto">
+              <UtensilsCrossed className="w-6 h-6" />
+            </div>
+            <h3 className="font-extrabold text-white text-base">Aviso de GastroBistro</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">{restNoticeMsg}</p>
+            <button
+              onClick={() => setShowRestNoticeModal(false)}
+              className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-lg cursor-pointer transition-colors"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE TABLE MODAL */}
+      {deletingTableId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-sm w-full p-6 text-center space-y-4">
+            <h3 className="font-bold text-slate-900 text-sm">Eliminar Mesa del Salón</h3>
+            <p className="text-xs text-slate-500">¿Está seguro de eliminar esta mesa del mapa interactivo?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDeletingTableId(null)}
+                className="flex-1 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-200 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => confirmDeleteTable(deletingTableId)}
+                className="flex-1 py-2 bg-rose-600 text-white font-bold rounded-xl text-xs hover:bg-rose-700 cursor-pointer"
+              >
+                Eliminar Mesa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

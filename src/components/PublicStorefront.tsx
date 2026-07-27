@@ -82,16 +82,22 @@ export default function PublicStorefront({
   };
 
   // Submit Web Order
+  const [storefrontNoticeMsg, setStorefrontNoticeMsg] = useState<string>("");
+  const [showStorefrontNoticeModal, setShowStorefrontNoticeModal] = useState<boolean>(false);
+
   const handleCheckoutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !customerPhone.trim()) {
-      alert("Por favor ingrese su nombre y teléfono para completar el pedido.");
+      setStorefrontNoticeMsg("Por favor ingrese su nombre y teléfono para completar el pedido.");
+      setShowStorefrontNoticeModal(true);
       return;
     }
     if (cart.length === 0) {
-      alert("Su carrito de compras está vacío.");
+      setStorefrontNoticeMsg("Su carrito de compras está vacío.");
+      setShowStorefrontNoticeModal(true);
       return;
     }
+
 
     const orderId = `web_${Math.floor(1000 + Math.random() * 9000)}`;
     const newOrder = {
@@ -534,6 +540,26 @@ export default function PublicStorefront({
         <p>© {new Date().getFullYear()} {company.name} — Tienda Online Oficial Sincronizada con Cloud POS</p>
       </footer>
 
+      {/* NOTICE OVERLAY MODAL */}
+      {showStorefrontNoticeModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-fadeIn text-white text-center">
+            <div className="w-12 h-12 bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-2xl flex items-center justify-center mx-auto">
+              <ShoppingBag className="w-6 h-6" />
+            </div>
+            <h3 className="font-extrabold text-white text-base">Tienda Online</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">{storefrontNoticeMsg}</p>
+            <button
+              type="button"
+              onClick={() => setShowStorefrontNoticeModal(false)}
+              className="w-full py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-600/20 cursor-pointer"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

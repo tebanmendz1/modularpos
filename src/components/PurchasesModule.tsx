@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Truck, Plus, CheckCircle, FileText, ShoppingBag, FolderPlus, UserPlus, RefreshCw, BarChart2 } from "lucide-react";
+import { Truck, Plus, CheckCircle, FileText, ShoppingBag, FolderPlus, UserPlus, RefreshCw, BarChart2, AlertTriangle } from "lucide-react";
 import { Supplier, PurchaseOrder, Product, Company, Branch, Warehouse } from "../types";
 
 interface PurchasesModuleProps {
@@ -31,6 +31,11 @@ export default function PurchasesModule({
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
 
+  // Notice & Confirmation modal states
+  const [purchaseNoticeMsg, setPurchaseNoticeMsg] = useState<string>("");
+  const [showPurchaseNoticeModal, setShowPurchaseNoticeModal] = useState<boolean>(false);
+  const [receivingPoId, setReceivingPoId] = useState<string | null>(null);
+
   // Supplier Form
   const [supName, setSupName] = useState("");
   const [supContact, setSupContact] = useState("");
@@ -59,7 +64,8 @@ export default function PurchasesModule({
   const handleAddSupplier = (e: React.FormEvent) => {
     e.preventDefault();
     if (!supName.trim()) {
-      alert("Por favor ingrese el nombre del proveedor.");
+      setPurchaseNoticeMsg("Por favor ingrese el nombre del proveedor.");
+      setShowPurchaseNoticeModal(true);
       return;
     }
 
@@ -96,18 +102,21 @@ export default function PurchasesModule({
   // Add item to draft PO items list
   const handleAddOrderItem = () => {
     if (!tempProductId) {
-      alert("Seleccione un producto.");
+      setPurchaseNoticeMsg("Seleccione un producto.");
+      setShowPurchaseNoticeModal(true);
       return;
     }
     const qtyNum = parseInt(tempQty);
     const costNum = parseFloat(tempCost);
 
     if (isNaN(qtyNum) || qtyNum <= 0) {
-      alert("Cantidad debe ser mayor a cero.");
+      setPurchaseNoticeMsg("La cantidad debe ser mayor a cero.");
+      setShowPurchaseNoticeModal(true);
       return;
     }
     if (isNaN(costNum) || costNum < 0) {
-      alert("Costo no puede ser negativo.");
+      setPurchaseNoticeMsg("El costo no puede ser negativo.");
+      setShowPurchaseNoticeModal(true);
       return;
     }
 
@@ -135,11 +144,13 @@ export default function PurchasesModule({
   const handleSavePurchaseOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplierId) {
-      alert("Por favor seleccione un proveedor.");
+      setPurchaseNoticeMsg("Por favor seleccione un proveedor.");
+      setShowPurchaseNoticeModal(true);
       return;
     }
     if (orderItems.length === 0) {
-      alert("Debe agregar al menos un producto a la orden.");
+      setPurchaseNoticeMsg("Debe agregar al menos un producto a la orden.");
+      setShowPurchaseNoticeModal(true);
       return;
     }
 
@@ -174,17 +185,14 @@ export default function PurchasesModule({
     setPoStatus("draft");
   };
 
-  // Receive stock from Purchase Order
-  const handleReceiveOrder = (poId: string) => {
+  // Confirm receipt of Purchase Order
+  const confirmReceiveOrder = (poId: string) => {
     const po = purchaseOrders.find((o) => o.id === poId);
     if (!po) return;
 
     if (!activeWarehouse) {
-      alert("No se encontró un almacén activo para esta sucursal. Configure un almacén antes de recibir mercancía.");
-      return;
-    }
-
-    if (!confirm(`¿Desea ingresar el stock de esta orden de compra en el almacén '${activeWarehouse.name}'? Esto actualizará las existencias de inmediato.`)) {
+      setPurchaseNoticeMsg("No se encontró un almacén activo para esta sucursal. Configure un almacén antes de recibir mercancía.");
+      setShowPurchaseNoticeModal(true);
       return;
     }
 
@@ -226,11 +234,43 @@ export default function PurchasesModule({
       `Mercancía recibida de Orden ${po.id}. Se cargaron productos al almacén '${activeWarehouse.name}' y se actualizaron costos de compra.`
     );
 
-    alert("¡Inventario cargado exitosamente! Las existencias y los costos de los productos han sido actualizados en tiempo real.");
+    setReceivingPoId(null);
+    setPurchaseNoticeMsg("¡Inventario cargado exitosamente! Las existencias y los costos de los productos han sido actualizados en tiempo real.");
+    setShowPurchaseNoticeModal(true);
   };
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col bg-slate-100 p-6" id="purchases-viewport">
+      {/* ALERT MODAL */}
+      {showPurchaseNoticeModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-sm w-full p-6 text-center">
+            <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-4" />
+            <p className="text-sm text-slate-700 font-medium mb-6">{purchaseNoticeMsg}</p>
+            <button 
+              onClick={() => setShowPurchaseNoticeModal(false)}
+              className="w-full bg-slate-900 text-white font-bold py-2 rounded-xl text-xs hover:bg-slate-800 transition-colors"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL */}
+      {receivingPoId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-sm w-full p-6 text-center">
+            <h3 className="font-bold text-slate-900 mb-2">Confirmar Recepción</h3>
+            <p className="text-xs text-slate-500 mb-6">¿Desea ingresar el stock de esta orden de compra en el almacén '{activeWarehouse?.name}'? Esto actualizará las existencias.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setReceivingPoId(null)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-2 rounded-xl text-xs hover:bg-slate-200">Cancelar</button>
+              <button onClick={() => confirmReceiveOrder(receivingPoId)} className="flex-1 bg-indigo-600 text-white font-bold py-2 rounded-xl text-xs hover:bg-indigo-700">Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER SECTION */}
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -337,9 +377,10 @@ export default function PurchasesModule({
                       <td className="p-3 text-center">
                         {o.status !== "received" ? (
                           <button
-                            onClick={() => handleReceiveOrder(o.id)}
+                            onClick={() => setReceivingPoId(o.id)}
                             className="px-2.5 py-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 rounded-lg text-[10px] font-black cursor-pointer transition-colors"
                           >
+
                             Recibir Mercancía
                           </button>
                         ) : (

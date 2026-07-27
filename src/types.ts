@@ -495,4 +495,22 @@ export function isDemoCompany(companyId: string | undefined | null): boolean {
   return ["comp_supermercado", "comp_bistro", "comp_boutique"].includes(companyId);
 }
 
+export interface Quote {
+  id: string;
+  companyId: string;
+  customerId?: string;
+  customerName: string;
+  date: string;
+  validUntil: string;
+  items: SaleItem[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  notes?: string;
+  status: "draft" | "approved" | "expired" | "facturada";
+  convertedSaleId?: string;
+}
+
+
 

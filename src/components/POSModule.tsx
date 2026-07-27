@@ -44,7 +44,9 @@ interface POSModuleProps {
   activeTableId: string | null;
   setActiveTableId: (id: string | null) => void;
   onNavigateToTab: (tab: string) => void;
+  onUpdateQuoteStatus?: (quoteId: string, status: "facturada", saleId: string) => void;
 }
+
 
 export default function POSModule({
   activeCompany,
@@ -66,7 +68,8 @@ export default function POSModule({
   onUpdateTables,
   activeTableId,
   setActiveTableId,
-  onNavigateToTab
+  onNavigateToTab,
+  onUpdateQuoteStatus
 }: POSModuleProps) {
   // POS States
   const [cart, setCart] = useState<SaleItem[]>(() => {
@@ -318,6 +321,12 @@ export default function POSModule({
   // Dominican Fiscal Sequence (NCF) - Default is NONE (Sin NCF, Opcional)
   const [ncfType, setNcfType] = useState<string>("NONE");
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+
+  // Quote Conversion State
+  const [loadedQuoteId, setLoadedQuoteId] = useState<string | null>(() => {
+    return localStorage.getItem("pos_pending_load_quote_id");
+  });
+
 
   // STRICT ACTIVE MODULE RULES VALIDATION
   const validateActiveModuleRules = (): { valid: boolean; message?: string } => {
@@ -1290,12 +1299,20 @@ export default function POSModule({
 
     onAddSale(newSale);
 
+    const activePendingQuoteId = loadedQuoteId || localStorage.getItem("pos_pending_load_quote_id");
+    if (activePendingQuoteId && onUpdateQuoteStatus) {
+      onUpdateQuoteStatus(activePendingQuoteId, "facturada", newSale.id);
+      setLoadedQuoteId(null);
+      localStorage.removeItem("pos_pending_load_quote_id");
+    }
+
     // Sync cash income to active session
     if (activeSession && (paymentMethod === "Efectivo" || paymentMethod === "Dividido")) {
       const cashAmt = paymentMethod === "Efectivo" ? total : (parseFloat(splitCash) || 0);
       if (cashAmt > 0) {
         onCashInSession(cashAmt, 'in');
       }
+
     }
 
     onAddAudit(

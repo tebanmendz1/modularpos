@@ -1,23 +1,6 @@
 import React, { useState } from "react";
-import { ClipboardList, Plus, Search, Calendar, FileText, ShoppingCart, CheckCircle, Printer, Eye, Award } from "lucide-react";
-import { Product, Customer, Company, Branch, SaleItem } from "../types";
-
-// Quote interface defined specifically for this workspace module
-export interface Quote {
-  id: string;
-  companyId: string;
-  customerId?: string;
-  customerName: string;
-  date: string;
-  validUntil: string;
-  items: SaleItem[];
-  subtotal: number;
-  discount: number;
-  tax: number;
-  total: number;
-  notes?: string;
-  status: "draft" | "approved" | "expired";
-}
+import { ClipboardList, Plus, Search, Calendar, FileText, ShoppingCart, CheckCircle, Printer, Eye, Award, X, CheckCircle2, AlertCircle, ShieldCheck } from "lucide-react";
+import { Product, Customer, Company, Branch, SaleItem, Quote } from "../types";
 
 interface QuotesModuleProps {
   activeCompany: Company;
@@ -43,8 +26,16 @@ export default function QuotesModule({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
 
+  // Status Filter Tab ("all" | "pending" | "billed")
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "billed">("all");
+
+  // Custom Modal Banner Notice (replacing browser alerts)
+  const [noticeModalMsg, setNoticeModalMsg] = useState<string>("");
+  const [showNoticeModal, setShowNoticeModal] = useState<boolean>(false);
+
   // Search filter
   const [searchQuery, setSearchQuery] = useState("");
+
 
   // Create Form States
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -73,18 +64,21 @@ export default function QuotesModule({
 
   const handleAddTempItem = () => {
     if (!tempProductId) {
-      alert("Seleccione un producto.");
+      setNoticeModalMsg("Por favor seleccione un producto para agregar a la cotización.");
+      setShowNoticeModal(true);
       return;
     }
     const qtyNum = parseFloat(tempQty);
     const discNum = parseFloat(tempDiscount);
 
     if (isNaN(qtyNum) || qtyNum <= 0) {
-      alert("Cantidad inválida.");
+      setNoticeModalMsg("Ingrese una cantidad válida mayor a cero.");
+      setShowNoticeModal(true);
       return;
     }
     if (isNaN(discNum) || discNum < 0 || discNum > 100) {
-      alert("Descuento inválido (0 - 100%).");
+      setNoticeModalMsg("Ingrese un porcentaje de descuento válido (entre 0% y 100%).");
+      setShowNoticeModal(true);
       return;
     }
 
@@ -146,7 +140,8 @@ export default function QuotesModule({
   const handleCreateQuote = (e: React.FormEvent) => {
     e.preventDefault();
     if (quoteItems.length === 0) {
-      alert("Por favor agregue al menos un producto a la cotización.");
+      setNoticeModalMsg("Por favor agregue al menos un producto a la cotización antes de guardar.");
+      setShowNoticeModal(true);
       return;
     }
 
@@ -212,7 +207,9 @@ export default function QuotesModule({
 
   // LOAD QUOTE INTO POS SHOPPING CART
   const handleConvertToSale = (q: Quote) => {
-    if (!confirm(`¿Desea cargar esta cotización en el carrito de venta del POS? Se transferirán todos los ítems y el cliente seleccionado.`)) {
+    if (q.status === "facturada") {
+      setNoticeModalMsg(`La cotización #${q.id} ya fue facturada en el POS (Venta ${q.convertedSaleId ? '#' + q.convertedSaleId : ''}) y no puede volverse a cobrar.`);
+      setShowNoticeModal(true);
       return;
     }
 
@@ -224,7 +221,8 @@ export default function QuotesModule({
       variant: undefined
     })).filter((i) => i.product !== undefined);
 
-    // Write to browser local storage for POS Module to load on initialization
+    // Save pending load quote ID so POS marks it as facturada on checkout
+    localStorage.setItem("pos_pending_load_quote_id", q.id);
     localStorage.setItem("pos_pending_load_cart", JSON.stringify(cartLoadItems));
     
     if (q.customerId) {
@@ -240,9 +238,8 @@ export default function QuotesModule({
 
     // Navigate to POS tab
     onNavigateToPOS();
-
-    alert("¡Cotización cargada con éxito! Proceda a facturar o registrar el pago en el Punto de Venta.");
   };
+
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col bg-slate-100 p-6" id="quotes-viewport">
@@ -266,7 +263,7 @@ export default function QuotesModule({
       </div>
 
       {/* SEARCH AND FILTERS BAR */}
-      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shrink-0 flex items-center gap-4 mb-6">
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -276,6 +273,31 @@ export default function QuotesModule({
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
           />
+        </div>
+
+        {/* STATUS TABS */}
+        <div className="flex bg-slate-100 p-1 rounded-xl gap-1 text-xs font-semibold shrink-0">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("all")}
+            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${statusFilter === "all" ? "bg-white text-indigo-600 shadow-xs font-bold" : "text-slate-500 hover:text-slate-800"}`}
+          >
+            Todas ({companyQuotes.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("pending")}
+            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${statusFilter === "pending" ? "bg-white text-indigo-600 shadow-xs font-bold" : "text-slate-500 hover:text-slate-800"}`}
+          >
+            Pendientes ({companyQuotes.filter(q => q.status !== "facturada").length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("billed")}
+            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${statusFilter === "billed" ? "bg-white text-emerald-600 shadow-xs font-bold" : "text-slate-500 hover:text-slate-800"}`}
+          >
+            Facturadas ({companyQuotes.filter(q => q.status === "facturada").length})
+          </button>
         </div>
       </div>
 
@@ -291,26 +313,48 @@ export default function QuotesModule({
                 <th className="p-3">Cliente</th>
                 <th className="p-3">Ítems</th>
                 <th className="p-3 text-right">Total</th>
+                <th className="p-3 text-center">Estado</th>
                 <th className="p-3 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
-              {filteredQuotes.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">
-                    No se encontraron cotizaciones registradas.
-                  </td>
-                </tr>
-              ) : (
-                filteredQuotes.map((q) => (
-                  <tr key={q.id} className="hover:bg-slate-50/50">
+              {(() => {
+                const finalDisplayed = filteredQuotes.filter(q => {
+                  if (statusFilter === "pending") return q.status !== "facturada";
+                  if (statusFilter === "billed") return q.status === "facturada";
+                  return true;
+                });
+
+                if (finalDisplayed.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400">
+                        No se encontraron cotizaciones en esta vista.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return finalDisplayed.map((q) => (
+                  <tr key={q.id} className={`hover:bg-slate-50/50 ${q.status === "facturada" ? "bg-emerald-50/10" : ""}`}>
                     <td className="p-3 font-mono text-[11px] text-slate-500">#{q.id}</td>
                     <td className="p-3 text-slate-500">{new Date(q.date).toLocaleDateString()}</td>
-                    <td className="p-3 text-red-500 font-semibold">{q.validUntil}</td>
+                    <td className="p-3 text-slate-500 font-semibold">{q.validUntil}</td>
                     <td className="p-3 font-bold text-slate-800">{q.customerName}</td>
                     <td className="p-3 text-slate-600 font-medium">{q.items.length} productos</td>
                     <td className="p-3 text-right font-bold text-slate-900 font-mono">
                       {activeCompany.settings.currency} {q.total.toFixed(2)}
+                    </td>
+                    <td className="p-3 text-center">
+                      {q.status === "facturada" ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Facturada
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1">
+                          Pendiente
+                        </span>
+                      )}
                     </td>
                     <td className="p-3 text-center">
                       <div className="flex items-center justify-center gap-2">
@@ -321,23 +365,31 @@ export default function QuotesModule({
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleConvertToSale(q)}
-                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
-                          title="Cargar en Punto de Venta"
-                        >
-                          <ShoppingCart className="w-3.5 h-3.5" />
-                          Facturar POS
-                        </button>
+
+                        {q.status === "facturada" ? (
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-400 rounded-lg text-[10px] font-bold inline-flex items-center gap-1">
+                            ✓ Cobrada
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleConvertToSale(q)}
+                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 border border-indigo-100 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                            title="Cargar en Punto de Venta"
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            Facturar POS
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+                ));
+              })()}
             </tbody>
           </table>
         </div>
       </div>
+
 
       {/* MODAL: CREATE QUOTE */}
       {showCreateModal && (
@@ -641,7 +693,55 @@ export default function QuotesModule({
             <div className="grid grid-cols-2 gap-3 mt-4 shrink-0">
               <button
                 onClick={() => {
-                  alert("Enviando impresión al dispositivo local...");
+                  const printContent = document.getElementById("quote-printable-layout")?.innerHTML;
+                  if (!printContent) return;
+
+                  let iframe = document.getElementById("silent-print-iframe") as HTMLIFrameElement | null;
+                  if (!iframe) {
+                    iframe = document.createElement("iframe");
+                    iframe.id = "silent-print-iframe";
+                    iframe.style.position = "fixed";
+                    iframe.style.right = "0";
+                    iframe.style.bottom = "0";
+                    iframe.style.width = "0";
+                    iframe.style.height = "0";
+                    iframe.style.border = "0";
+                    document.body.appendChild(iframe);
+                  }
+
+                  const doc = iframe.contentWindow?.document;
+                  if (doc) {
+                    doc.open();
+                    doc.write(`
+                      <!DOCTYPE html>
+                      <html>
+                        <head>
+                          <title>Cotización #${selectedQuote.id}</title>
+                          <style>
+                            @page { size: 80mm auto; margin: 0; }
+                            body { font-family: system-ui, sans-serif; width: 76mm; margin: 0 auto; padding: 10px 4px; font-size: 12px; }
+                            .text-center { text-align: center; }
+                            .text-right { text-align: right; }
+                            .font-bold { font-weight: bold; }
+                            .uppercase { text-transform: uppercase; }
+                            .border-b { border-bottom: 1px dashed #000; }
+                            .border-t { border-top: 1px solid #000; }
+                            .py-1 { padding: 4px 0; }
+                            .flex { display: flex; }
+                            .justify-between { justify-content: space-between; }
+                          </style>
+                        </head>
+                        <body>${printContent}</body>
+                      </html>
+                    `);
+                    doc.close();
+                    setTimeout(() => {
+                      if (iframe?.contentWindow) {
+                        iframe.contentWindow.focus();
+                        iframe.contentWindow.print();
+                      }
+                    }, 150);
+                  }
                 }}
                 className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
               >
@@ -653,15 +753,41 @@ export default function QuotesModule({
                   handleConvertToSale(selectedQuote);
                   setSelectedQuote(null);
                 }}
-                className="py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
+                disabled={selectedQuote.status === "facturada"}
+                className={`py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm ${
+                  selectedQuote.status === "facturada" 
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                    : "bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                }`}
               >
                 <ShoppingCart className="w-4 h-4" />
-                Cargar en POS
+                {selectedQuote.status === "facturada" ? "Facturada" : "Cargar en POS"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOTICE OVERLAY MODAL */}
+      {showNoticeModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4" id="modal-quotes-notice">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-fadeIn text-white text-center">
+            <div className="w-12 h-12 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-2xl flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h3 className="font-extrabold text-white text-base">Aviso de Cotización</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">{noticeModalMsg}</p>
+            <button
+              type="button"
+              onClick={() => setShowNoticeModal(false)}
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 cursor-pointer"
+            >
+              Entendido
+            </button>
           </div>
         </div>
       )}
     </div>
   );
 }
+

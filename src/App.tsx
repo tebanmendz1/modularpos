@@ -17,7 +17,8 @@ import CreditModule from "./components/CreditModule";
 import RestaurantModule from "./components/RestaurantModule";
 import ExpensesModule from "./components/ExpensesModule";
 import PurchasesModule from "./components/PurchasesModule";
-import QuotesModule, { Quote } from "./components/QuotesModule";
+import QuotesModule from "./components/QuotesModule";
+
 import FiscalModule from "./components/FiscalModule";
 import PayrollModule from "./components/PayrollModule";
 import DeliveryModule from "./components/DeliveryModule";
@@ -32,7 +33,8 @@ import SuperAdminModule from "./components/SuperAdminModule";
 import PublicStorefront from "./components/PublicStorefront";
 import AndroidMobileAppModule from "./components/AndroidMobileAppModule";
 import AccountingModule from "./components/AccountingModule";
-import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser, isDemoCompany } from "./types";
+import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser, isDemoCompany, Quote } from "./types";
+
 
 
 
@@ -603,6 +605,22 @@ export default function App() {
     localStorage.setItem("pos_quotes", JSON.stringify(qts));
   };
 
+  const handleUpdateQuoteStatus = (quoteId: string, status: "facturada" | "draft" | "approved" | "expired", saleId?: string) => {
+    const updatedQuotes = quotes.map((q) => {
+      if (q.id === quoteId) {
+        return {
+          ...q,
+          status,
+          convertedSaleId: saleId || q.convertedSaleId
+        };
+      }
+      return q;
+    });
+    setQuotes(updatedQuotes);
+    localStorage.setItem("pos_quotes", JSON.stringify(updatedQuotes));
+  };
+
+
   // CUSTOMIZATION/CONFIG SAVE
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -630,9 +648,9 @@ export default function App() {
       "Personalización",
       `Preferencias de facturación y tickets modificadas para ${activeCompany.name}.`
     );
-
-    alert("Preferencias de personalización aplicadas!");
   };
+
+
 
   const getInitials = (nameStr: string) => {
     if (!nameStr) return "U";
@@ -941,7 +959,9 @@ export default function App() {
               activeTableId={activeTableId}
               setActiveTableId={setActiveTableId}
               onNavigateToTab={setActiveTab}
+              onUpdateQuoteStatus={handleUpdateQuoteStatus}
             />
+
           )}
 
           {/* TAB: STOCK & CATALOG MANAGER */}

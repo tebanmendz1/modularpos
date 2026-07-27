@@ -141,13 +141,19 @@ export default function SuperAdminModule({
   const [customItem, setCustomItem] = useState({ name: "Soporte Técnico Extra", price: 1500, qty: 1 });
   const [generatedInvoice, setGeneratedInvoice] = useState<Sale | null>(null);
 
+  // Custom modal banner notice (replacing native browser alerts)
+  const [adminNoticeMsg, setAdminNoticeMsg] = useState<string>("");
+  const [showAdminNoticeModal, setShowAdminNoticeModal] = useState<boolean>(false);
+
   // Helper: Create Company
   const handleCreateCompany = (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyForm.name.trim()) {
-      alert("Ingrese el nombre de la empresa.");
+      setAdminNoticeMsg("Por favor ingrese el nombre de la empresa.");
+      setShowAdminNoticeModal(true);
       return;
     }
+
 
     const companyId = "comp_" + Math.random().toString(36).slice(2, 9);
     
@@ -240,7 +246,8 @@ export default function SuperAdminModule({
       `Se registró la empresa inquilina "${companyForm.name}" con Plan ${companyForm.plan} y módulos: ${companyForm.activeModules.join(", ")}`
     );
 
-    alert(`Empresa "${companyForm.name}" creada con éxito.\nAcceso de Propietario:\nEmail: ${companyForm.ownerEmail}\nPIN: ${companyForm.ownerPin}`);
+    setAdminNoticeMsg(`¡Empresa "${companyForm.name}" creada con éxito!\nAcceso de Propietario:\nEmail: ${companyForm.ownerEmail}\nPIN: ${companyForm.ownerPin}`);
+    setShowAdminNoticeModal(true);
     setShowCompanyModal(false);
     
     // Reset Form
@@ -268,7 +275,8 @@ export default function SuperAdminModule({
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userForm.companyId || !userForm.name.trim() || !userForm.email.trim() || !userForm.pin) {
-      alert("Por favor complete todos los datos del usuario.");
+      setAdminNoticeMsg("Por favor complete todos los datos obligatorios del usuario.");
+      setShowAdminNoticeModal(true);
       return;
     }
 
@@ -292,7 +300,8 @@ export default function SuperAdminModule({
       `Usuario ${userForm.name} asignado a la empresa ${compName} con rol ${userForm.role}`
     );
 
-    alert(`Colaborador "${userForm.name}" registrado con PIN ${userForm.pin} para la empresa ${compName}.`);
+    setAdminNoticeMsg(`Colaborador "${userForm.name}" registrado con PIN ${userForm.pin} para la empresa ${compName}.`);
+    setShowAdminNoticeModal(true);
     setShowUserModal(false);
 
     // Reset Form
@@ -325,12 +334,14 @@ export default function SuperAdminModule({
   const handleGenerateInvoice = (e: React.FormEvent) => {
     e.preventDefault();
     if (!invoiceForm.companyId) {
-      alert("Seleccione la empresa inquilina para facturar.");
+      setAdminNoticeMsg("Seleccione la empresa inquilina para facturar.");
+      setShowAdminNoticeModal(true);
       return;
     }
 
     if (invoiceCart.length === 0) {
-      alert("Agregue al menos un cargo de membresía o licencia al carrito.");
+      setAdminNoticeMsg("Agregue al menos un cargo de membresía o licencia al carrito.");
+      setShowAdminNoticeModal(true);
       return;
     }
 
@@ -404,7 +415,9 @@ export default function SuperAdminModule({
       `Se generó factura de plataforma SaaS ${newSale.id} (${ncfTypeSelected}) para ${companySelected.name} por membresía de licencia. Total: RD$ ${newSale.total}`
     );
 
-    alert(`Factura de membresía generada con éxito para ${companySelected.name}.\nNFC: ${generatedNCF}\nTotal: RD$ ${newSale.total}`);
+    setAdminNoticeMsg(`Factura de membresía generada con éxito para ${companySelected.name}.\nNCF: ${generatedNCF}\nTotal: RD$ ${newSale.total}`);
+    setShowAdminNoticeModal(true);
+
     
     // Clear invoice generator cart & reset
     setInvoiceCart([]);
@@ -1621,6 +1634,26 @@ export default function SuperAdminModule({
           </form>
         </div>
       )}
+      {/* NOTICE OVERLAY MODAL */}
+      {showAdminNoticeModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-fadeIn text-white text-center">
+            <div className="w-12 h-12 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-2xl flex items-center justify-center mx-auto">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <h3 className="font-extrabold text-white text-base">SuperAdmin Platform</h3>
+            <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{adminNoticeMsg}</p>
+            <button
+              type="button"
+              onClick={() => setShowAdminNoticeModal(false)}
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 cursor-pointer"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
