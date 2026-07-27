@@ -509,6 +509,13 @@ export default function POSModule({
   const [showConfirmCartReset, setShowConfirmCartReset] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
 
+  // Cash Close Denominations Breakdown & Close Receipt Ticket States
+  const [denominations, setDenominations] = useState<Record<number, number>>({
+    2000: 0, 1000: 0, 500: 0, 200: 0, 100: 0, 50: 0, 25: 0, 10: 0, 5: 0, 1: 0
+  });
+  const [closedSessionSummary, setClosedSessionSummary] = useState<any | null>(null);
+
+
 
   const handleFiscalRncLookup = (rnc: string) => {
     const cleanRnc = rnc.trim();
@@ -997,24 +1004,134 @@ export default function POSModule({
     setCashFlowDesc("");
   };
 
+  const getDenominationsTotal = (): number => {
+    return Object.entries(denominations).reduce((sum: number, [denom, count]) => {
+      const val = Number(denom);
+      const cnt = Number(count) || 0;
+      return sum + (val * cnt);
+    }, 0);
+  };
+
+
+  const handlePrintCashCloseReceipt = () => {
+    const printContent = document.getElementById("cash-close-ticket-layout")?.innerHTML;
+    if (!printContent) return;
+
+    let iframe = document.getElementById("silent-print-iframe") as HTMLIFrameElement | null;
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "silent-print-iframe";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+    }
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Ticket de Arqueo y Cierre de Caja</title>
+            <style>
+              @page { size: 80mm auto; margin: 0; }
+              body {
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                width: 76mm;
+                margin: 0 auto;
+                padding: 10px 4px;
+                font-size: 13px;
+                line-height: 1.5;
+                color: #000;
+                background-color: #fff;
+              }
+              .text-center { text-align: center; }
+              .text-right { text-align: right; }
+              .font-bold { font-weight: bold; }
+              .font-black { font-weight: 900; }
+              .uppercase { text-transform: uppercase; }
+              .border-b { border-bottom: 1px dashed #000; }
+              .border-t { border-top: 1px solid #000; }
+              .py-1 { padding-top: 4px; padding-bottom: 4px; }
+              .space-y-1 > * + * { margin-top: 4px; }
+              .flex { display: flex; }
+              .justify-between { justify-content: space-between; }
+              .text-slate-700, .text-slate-600, .text-slate-500, .text-slate-400 { color: #000 !important; }
+              .bg-white { background-color: #fff; }
+              .font-mono { font-family: Consolas, monospace; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            ${printContent}
+          </body>
+        </html>
+      `);
+      doc.close();
+      setTimeout(() => {
+        if (iframe?.contentWindow) {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        }
+      }, 150);
+    }
+  };
+
   // Close cash session
   const handleCloseCash = () => {
     if (!activeSession) return;
-    const finalAmount = parseFloat(closeFundInput) || 0;
+    const denomTotal = getDenominationsTotal();
+    const manualAmount = parseFloat(closeFundInput) || 0;
+    const finalAmount = denomTotal > 0 ? denomTotal : manualAmount;
+
+    // Filter sales during this session for sales method summary breakdown
+    const sessionSales = sales.filter(s => s.companyId === activeCompany.id && s.branchId === activeBranch.id);
+    const cashSalesTotal = sessionSales.filter(s => s.paymentMethod === "Efectivo").reduce((a, b) => a + b.total, 0);
+    const cardSalesTotal = sessionSales.filter(s => s.paymentMethod === "Tarjeta").reduce((a, b) => a + b.total, 0);
+    const creditSalesTotal = sessionSales.filter(s => s.paymentMethod === "Crédito").reduce((a, b) => a + b.total, 0);
+    const otherSalesTotal = sessionSales.filter(s => !["Efectivo", "Tarjeta", "Crédito"].includes(s.paymentMethod)).reduce((a, b) => a + b.total, 0);
+    const totalSalesSum = cashSalesTotal + cardSalesTotal + creditSalesTotal + otherSalesTotal;
+
+    const expected = activeSession.initialFund + activeSession.cashIn - activeSession.cashOut + cashSalesTotal;
+    const diff = finalAmount - expected;
 
     onCloseCashSession(activeSession.id, finalAmount);
-    
-    const expected = activeSession.initialFund + activeSession.cashIn - activeSession.cashOut;
-    const diff = finalAmount - expected;
 
     onAddAudit(
       "Cierre Caja",
       `Caja cerrada por ${currentUser.name}. Esperado: $${expected.toFixed(2)}, Declarado: $${finalAmount.toFixed(2)}. Diferencia: $${diff.toFixed(2)}`
     );
 
+    // Save summary object for ticket view
+    setClosedSessionSummary({
+      id: activeSession.id,
+      cashierName: currentUser.name,
+      companyName: activeCompany.name,
+      branchName: activeBranch.name,
+      openDate: activeSession.openDate,
+      closeDate: new Date().toISOString(),
+      initialFund: activeSession.initialFund,
+      cashIn: activeSession.cashIn,
+      cashOut: activeSession.cashOut,
+      cashSalesTotal,
+      cardSalesTotal,
+      creditSalesTotal,
+      otherSalesTotal,
+      totalSalesSum,
+      expectedCash: expected,
+      declaredCash: finalAmount,
+      difference: diff,
+      denominations: { ...denominations }
+    });
+
     setShowCashCloseModal(false);
     setCloseFundInput("");
   };
+
 
   // Suspend sale
   const handleSuspendSale = () => {
@@ -2431,58 +2548,107 @@ export default function POSModule({
       )}
 
 
-      {/* CASH REGISTERS TURN CLOSE MODAL */}
+      {/* CASH REGISTERS TURN CLOSE MODAL WITH DENOMINATIONS BREAKDOWN */}
       {showCashCloseModal && activeSession && (
-        <div className="fixed inset-0 bg-black/55 backdrop-blur-xs flex items-center justify-center z-50 p-4 text-slate-800" id="cash-close-modal">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full border border-slate-100">
-            <div className="flex items-center gap-3 mb-4 text-slate-900">
-              <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
-                <AlertTriangle className="w-5 h-5 animate-pulse" />
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 text-slate-800" id="cash-close-modal">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-fadeIn text-white">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-2xl">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Arqueo y Cierre de Turno de Caja</h3>
+                  <p className="text-[11px] text-slate-400">Reconciliación de efectivo por denominaciones</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-sm">Cierre de Turno de Caja (Arqueo)</h3>
-                <p className="text-xs text-slate-500">Reconciliación física de efectivo</p>
-              </div>
-            </div>
-
-            <div className="space-y-2 mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-600 font-medium">
-              <div className="flex justify-between">
-                <span>Fondo Inicial:</span>
-                <span className="font-mono text-slate-800">${activeSession.initialFund.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-emerald-600">
-                <span>Ingresos Registrados (+):</span>
-                <span className="font-mono">${activeSession.cashIn.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-rose-500">
-                <span>Retiros de Turno (-):</span>
-                <span className="font-mono">-${activeSession.cashOut.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-2 font-bold text-slate-900">
-                <span>Efectivo Esperado en Caja:</span>
-                <span className="font-mono text-sm">${(activeSession.initialFund + activeSession.cashIn - activeSession.cashOut).toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 mb-5">
-              <label className="text-xs font-bold text-slate-600">Declarar Efectivo Físico Arqueado</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
-                <input
-                  type="number"
-                  value={closeFundInput}
-                  onChange={(e) => setCloseFundInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-6 pr-4 py-2 font-mono font-bold text-slate-900 focus:bg-white focus:border-rose-500 focus:outline-hidden"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setShowCashCloseModal(false)}
-                className="flex-1 py-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-xs font-semibold cursor-pointer"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Expected Summary */}
+            <div className="space-y-2 p-3 bg-slate-950 rounded-2xl border border-slate-800 text-xs text-slate-300 font-medium">
+              <div className="flex justify-between">
+                <span>Fondo Inicial:</span>
+                <span className="font-mono text-white font-bold">${activeSession.initialFund.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-emerald-400">
+                <span>Ingresos Extra (+):</span>
+                <span className="font-mono font-bold">+${activeSession.cashIn.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-rose-400">
+                <span>Retiros / Gastos (-):</span>
+                <span className="font-mono font-bold">-${activeSession.cashOut.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-800 pt-2 font-bold text-white text-sm">
+                <span>Efectivo Esperado:</span>
+                <span className="font-mono text-emerald-400">${(activeSession.initialFund + activeSession.cashIn - activeSession.cashOut).toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* DENOMINATIONS GRID */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">
+                Conteo de Billetes y Monedas (Desglose Físico)
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-950 p-3 rounded-2xl border border-slate-800 text-xs">
+                {[2000, 1000, 500, 200, 100, 50, 25, 10, 5, 1].map((val) => (
+                  <div key={val} className="flex flex-col items-center bg-slate-900 border border-slate-800 p-2 rounded-xl">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
+                      {val >= 50 ? `BD$${val}` : `M$${val}`}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={denominations[val] || ""}
+                      onChange={(e) => {
+                        const count = parseInt(e.target.value) || 0;
+                        setDenominations({ ...denominations, [val]: Math.max(0, count) });
+                      }}
+                      placeholder="0"
+                      className="w-full bg-slate-950 border border-slate-800 text-center text-white font-mono font-extrabold rounded-lg py-1 mt-1 text-xs focus:outline-hidden focus:border-sky-500"
+                    />
+                    <span className="text-[9px] text-slate-500 font-mono mt-1">
+                      =${((denominations[val] || 0) * val).toFixed(0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Total Declared vs Expected comparison */}
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-between text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Efectivo Arqueado:</span>
+                <span className="text-base font-extrabold font-mono text-sky-400">
+                  DOP ${getDenominationsTotal() > 0 ? getDenominationsTotal().toFixed(2) : (parseFloat(closeFundInput) || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Diferencia:</span>
+                {(() => {
+                  const declared = getDenominationsTotal() > 0 ? getDenominationsTotal() : (parseFloat(closeFundInput) || 0);
+                  const expected = activeSession.initialFund + activeSession.cashIn - activeSession.cashOut;
+                  const diff = declared - expected;
+                  return (
+                    <span className={`text-xs font-mono font-bold ${diff < 0 ? 'text-rose-400' : diff > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                      {diff === 0 ? 'Cuadrado ($0.00)' : diff > 0 ? `+${diff.toFixed(2)} (Sobrante)` : `${diff.toFixed(2)} (Faltante)`}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowCashCloseModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white transition-all cursor-pointer"
                 id="btn-cancel-cash-close"
               >
                 Volver
@@ -2490,15 +2656,112 @@ export default function POSModule({
               <button
                 type="button"
                 onClick={handleCloseCash}
-                className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-lg shadow-rose-600/10"
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/20 cursor-pointer flex items-center gap-2"
                 id="btn-confirm-cash-close"
               >
-                Cerrar Turno
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Confirmar y Imprimir Ticket Cierre</span>
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* CLOSED CASH SESSION TICKET RESUMEN MODAL */}
+      {closedSessionSummary && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 text-slate-800" id="closed-cash-summary-modal">
+          <div className="bg-slate-100 rounded-3xl shadow-2xl p-6 max-w-sm w-full border border-slate-300 flex flex-col items-center animate-fadeIn">
+            
+            {/* 80mm Thermal Ticket Print Layout */}
+            <div className="bg-white border border-slate-200 shadow-md p-5 rounded-md font-mono text-[10.5px] text-slate-700 w-full max-w-72 leading-relaxed" id="cash-close-ticket-layout">
+              <div className="text-center font-bold text-xs uppercase tracking-wider border-b border-dashed border-slate-300 pb-2 mb-2">
+                {closedSessionSummary.companyName}
+                <div className="text-[9px] font-medium uppercase text-slate-500 mt-0.5">{closedSessionSummary.branchName}</div>
+                <div className="text-[10px] font-black text-rose-600 mt-1 uppercase">RESUMEN DE CIERRE DE CAJA</div>
+              </div>
+
+              <div className="space-y-1 mb-2 pb-2 border-b border-dashed border-slate-300 text-[9.5px]">
+                <div>Turno ID: {closedSessionSummary.id}</div>
+                <div>Cajero: {closedSessionSummary.cashierName}</div>
+                <div>Apertura: {new Date(closedSessionSummary.openDate).toLocaleString()}</div>
+                <div>Cierre: {new Date(closedSessionSummary.closeDate).toLocaleString()}</div>
+              </div>
+
+              <div className="space-y-1 mb-2 pb-2 border-b border-dashed border-slate-300">
+                <div className="font-bold uppercase text-[9px] text-slate-400">DESGLOSE DE OPERACIONES</div>
+                <div className="flex justify-between"><span>Fondo Inicial:</span><span>${closedSessionSummary.initialFund.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Ingresos Extra:</span><span>+${closedSessionSummary.cashIn.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Retiros / Gastos:</span><span>-${closedSessionSummary.cashOut.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Ventas Efectivo:</span><span>+${closedSessionSummary.cashSalesTotal.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Ventas Tarjeta:</span><span>${closedSessionSummary.cardSalesTotal.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Ventas Crédito:</span><span>${closedSessionSummary.creditSalesTotal.toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold border-t border-slate-200 pt-1">
+                  <span>TOTAL VENTAS:</span><span>${closedSessionSummary.totalSalesSum.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Denominations breakdown */}
+              <div className="space-y-1 mb-2 pb-2 border-b border-dashed border-slate-300">
+                <div className="font-bold uppercase text-[9px] text-slate-400">DESGLOSE BILLETES Y MONEDAS</div>
+                {Object.entries(closedSessionSummary.denominations || {})
+                  .filter(([_, count]: any) => count > 0)
+                  .map(([denom, count]: any) => (
+                    <div key={denom} className="flex justify-between">
+                      <span>{parseFloat(denom) >= 50 ? `Billete $${denom}` : `Moneda $${denom}`} x{count}:</span>
+                      <span>${(parseFloat(denom) * count).toFixed(2)}</span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Reconciliation totals */}
+              <div className="space-y-1 text-right border-t border-dashed border-slate-300 pt-2">
+                <div className="flex justify-between">
+                  <span>Efectivo Esperado:</span>
+                  <span>${closedSessionSummary.expectedCash.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>Efectivo Declarado:</span>
+                  <span>${closedSessionSummary.declaredCash.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-black text-xs pt-1 border-t border-slate-300">
+                  <span>DIFERENCIA:</span>
+                  <span className={closedSessionSummary.difference < 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                    ${closedSessionSummary.difference.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-center italic mt-4 text-[8px] text-slate-400 border-t border-slate-100 pt-2">
+                Documento de Arqueo y Control Interno de Caja
+              </div>
+            </div>
+
+            {/* Print and Actions buttons */}
+            <div className="flex flex-col gap-2 w-full max-w-72 mt-4">
+              <button
+                type="button"
+                onClick={handlePrintCashCloseReceipt}
+                className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all"
+                id="btn-print-cash-close-ticket"
+              >
+                <Printer className="w-4 h-4 text-sky-400" />
+                <span>Imprimir Ticket de Cierre</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setClosedSessionSummary(null)}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/20 transition-all"
+                id="btn-close-cash-summary-modal"
+              >
+                <Check className="w-4 h-4" />
+                <span>Aceptar y Salir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* COMPROBANTE FISCAL / CONSULTA RNC MODAL */}
       {showFiscalModal && (

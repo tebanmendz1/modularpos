@@ -229,7 +229,8 @@ export default function App() {
     };
 
     // Demo companies operate in isolated sandbox session; changes reset on server restart / 24h
-    if (isDemoCompany(activeCompany?.id)) {
+    // EXCEPT when customState explicitly forces server save or modifies the companies list
+    if (!customState?.forceServerSave && !customState?.companies && isDemoCompany(activeCompany?.id)) {
       localStorage.setItem("pos_db_backup", JSON.stringify(stateToSave));
       return;
     }
@@ -245,6 +246,7 @@ export default function App() {
     } catch (err) {
       console.error("Error al persistir base de datos en el servidor", err);
     }
+
 
   };
 
@@ -513,8 +515,18 @@ export default function App() {
 
     if (isOnline) {
       saveDbStateToServer({
-        companies: updatedCompanies,
-        branches, warehouses, users, products, sales, customers, cashSessions, auditLogs
+        forceServerSave: true,
+        companies: updatedCompanies
+      });
+    }
+  };
+
+  const handleUpdateCompaniesList = (cList: Company[]) => {
+    setCompanies(cList);
+    if (isOnline) {
+      saveDbStateToServer({
+        forceServerSave: true,
+        companies: cList
       });
     }
   };
@@ -714,6 +726,16 @@ export default function App() {
       setActiveCompany(newCompany);
       setActiveBranch(newBranch);
       setCurrentUser(newUser);
+
+      // Force instant sync to server DB so company exists across Pake desktop and Web
+      saveDbStateToServer({
+        forceServerSave: true,
+        companies: updatedCompanies,
+        branches: updatedBranches,
+        warehouses: updatedWarehouses,
+        users: updatedUsers
+      });
+
 
       const allowed = getAllowedTabsForUser(newUser, newCompany);
       setActiveTab(allowed[0] || "pos");
@@ -1189,10 +1211,8 @@ export default function App() {
           {activeTab === "superadmin" && (
             <SuperAdminModule
               companies={companies}
-              onUpdateCompanies={(compList) => {
-                setCompanies(compList);
-                if (isOnline) saveDbStateToServer({ companies: compList });
-              }}
+              onUpdateCompanies={handleUpdateCompaniesList}
+
               users={users}
               onUpdateUsers={handleUpdateUsers}
               branches={branches}

@@ -865,20 +865,66 @@ export default function InventoryModule({
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Unidad de Medida</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Unidad de Medida (Multi-Negocio)</label>
                   <select
                     value={newProdUnit}
                     onChange={(e) => setNewProdUnit(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:bg-white focus:border-indigo-500 cursor-pointer font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:bg-white focus:border-indigo-500 cursor-pointer font-semibold"
                     id="new-prod-unit"
                   >
-                    <option value="Unidades">Unidades (Ud)</option>
-                    <option value="Libras">Libras (Lb - Pesable)</option>
-                    <option value="Kilogramos">Kilogramos (Kg - Pesable)</option>
-                    <option value="Cajas">Cajas (Cx)</option>
-                    <option value="Pies">Pies (Ft)</option>
+                    <optgroup label="📦 Conteo y Empaque">
+                      <option value="Unidades">Unidades (ud)</option>
+                      <option value="Piezas">Piezas (pz)</option>
+                      <option value="Cajas">Cajas (cj)</option>
+                      <option value="Paquetes">Paquetes (pq)</option>
+                      <option value="Docenas">Docenas (doc)</option>
+                      <option value="Pares">Pares (par)</option>
+                      <option value="Kits">Kits (kt)</option>
+                      <option value="Sets">Sets (set)</option>
+                      <option value="Bultos">Bultos (bt)</option>
+                      <option value="Sacos">Sacos (sc)</option>
+                      <option value="Fardos">Fardos (fd)</option>
+                      <option value="Latas">Latas (lt)</option>
+                      <option value="Botellas">Botellas (bot)</option>
+                      <option value="Cajas Master">Cajas Master (cm)</option>
+                    </optgroup>
+                    
+                    <optgroup label="⚖️ Peso y Masa">
+                      <option value="Libras">Libras (lb - Pesable)</option>
+                      <option value="Kilogramos">Kilogramos (kg - Pesable)</option>
+                      <option value="Gramos">Gramos (g)</option>
+                      <option value="Onzas">Onzas (oz)</option>
+                      <option value="Quintales">Quintales (q)</option>
+                      <option value="Toneladas">Toneladas (t)</option>
+                    </optgroup>
+                    
+                    <optgroup label="🧪 Volumen y Líquidos">
+                      <option value="Litros">Litros (L)</option>
+                      <option value="Mililitros">Mililitros (ml)</option>
+                      <option value="Galones">Galones (gal)</option>
+                      <option value="Onzas Fluidas">Onzas Fluidas (fl oz)</option>
+                      <option value="Barriles">Barriles (bbl)</option>
+                    </optgroup>
+                    
+                    <optgroup label="📏 Longitud y Superficie">
+                      <option value="Metros">Metros (m)</option>
+                      <option value="Centímetros">Centímetros (cm)</option>
+                      <option value="Pulgadas">Pulgadas (in)</option>
+                      <option value="Pies">Pies (ft)</option>
+                      <option value="Yardas">Yardas (yd)</option>
+                      <option value="Metros Cuadrados">Metros Cuadrados (m²)</option>
+                      <option value="Metros Cúbicos">Metros Cúbicos (m³)</option>
+                    </optgroup>
+
+                    <optgroup label="⏱️ Servicios y Tiempo">
+                      <option value="Servicios">Servicios (srv)</option>
+                      <option value="Horas">Horas (hrs)</option>
+                      <option value="Días">Días (días)</option>
+                      <option value="Meses">Meses (mes)</option>
+                    </optgroup>
                   </select>
                 </div>
+
               </div>
 
               {/* Product Image File Upload */}

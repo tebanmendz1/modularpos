@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CreditCard, Search, DollarSign, ArrowUpRight, ArrowDownRight, History, Calendar, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
+import { CreditCard, Search, DollarSign, ArrowUpRight, ArrowDownRight, History, Calendar, CheckCircle2, AlertTriangle, ShieldCheck, UserPlus, Edit2, X, PlusCircle, Building } from "lucide-react";
 import { Customer } from "../types";
 
 interface CreditModuleProps {
@@ -18,12 +18,82 @@ export default function CreditModule({
   const [search, setSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
+  // Registration Modal States
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [newCustName, setNewCustName] = useState("");
+  const [newCustRnc, setNewCustRnc] = useState("");
+  const [newCustPhone, setNewCustPhone] = useState("");
+  const [newCustEmail, setNewCustEmail] = useState("");
+  const [newCustLimit, setNewCustLimit] = useState("10000");
+
+  // Edit Credit Limit Modal States
+  const [editingCreditLimitCust, setEditingCreditLimitCust] = useState<Customer | null>(null);
+  const [editLimitInput, setEditLimitInput] = useState("");
+
   // Credit pay down states
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState("Efectivo");
   const [payNotes, setPayNotes] = useState("");
 
-  const companyCustomers = customers.filter((c) => c.companyId === activeCompany.id && c.creditLimit > 0);
+  const companyCustomers = customers.filter((c) => c.companyId === activeCompany.id);
+
+  const handleRegisterCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustName.trim() || !newCustPhone.trim()) {
+      alert("El Nombre y Teléfono son obligatorios.");
+      return;
+    }
+
+    const limit = parseFloat(newCustLimit) || 0;
+    const newCustomer: Customer = {
+      id: "cust_" + Math.random().toString(36).slice(2, 9),
+      companyId: activeCompany.id,
+      name: newCustName.trim(),
+      rncOrCedula: newCustRnc.trim(),
+      phone: newCustPhone.trim(),
+      email: newCustEmail.trim() || `${newCustName.toLowerCase().replace(/\s+/g, '')}@cliente.com`,
+      points: 100,
+      tier: "Bronce",
+      creditLimit: limit,
+      currentDebt: 0,
+      synced: true
+    };
+
+    const updated = [...customers, newCustomer];
+    onUpdateCustomers(updated);
+    onAddAudit("Registrar Cliente", `Cliente ${newCustomer.name} registrado con límite de crédito DOP $${limit.toFixed(2)}.`);
+
+    setNewCustName("");
+    setNewCustRnc("");
+    setNewCustPhone("");
+    setNewCustEmail("");
+    setNewCustLimit("10000");
+    setShowAddCustomerModal(false);
+    setSelectedCustomer(newCustomer);
+  };
+
+  const handleSaveEditCreditLimit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCreditLimitCust) return;
+
+    const newLimit = parseFloat(editLimitInput) || 0;
+    const updated = customers.map(c => {
+      if (c.id === editingCreditLimitCust.id) {
+        return { ...c, creditLimit: newLimit };
+      }
+      return c;
+    });
+
+    onUpdateCustomers(updated);
+    onAddAudit("Modificar Límite de Crédito", `Límite de crédito de ${editingCreditLimitCust.name} actualizado a DOP $${newLimit.toFixed(2)}.`);
+
+    if (selectedCustomer?.id === editingCreditLimitCust.id) {
+      setSelectedCustomer({ ...selectedCustomer, creditLimit: newLimit });
+    }
+
+    setEditingCreditLimitCust(null);
+    setEditLimitInput("");
+  };
 
   const handleRegisterPayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,8 +137,10 @@ export default function CreditModule({
 
   const filtered = companyCustomers.filter((c) => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
-    (c.rncOrCedula && c.rncOrCedula.includes(search))
+    (c.rncOrCedula && c.rncOrCedula.includes(search)) ||
+    (c.phone && c.phone.includes(search))
   );
+
 
   return (
     <div className="flex-1 flex overflow-hidden bg-slate-50 text-slate-800" id="credit-module-root">
@@ -79,10 +151,20 @@ export default function CreditModule({
           <div>
             <h2 className="font-bold text-lg text-slate-950 flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-indigo-600" />
-              Cuentas por Cobrar (Límite de Crédito Clientes)
+              Gestión de Clientes & Límites de Crédito
             </h2>
-            <p className="text-xs text-slate-500 mt-1">Supervise límites de endeudamiento asignados, registre abonos de saldos y administre deudas de clientes autorizados.</p>
+            <p className="text-xs text-slate-500 mt-1">Registre clientes, asigne líneas de crédito corporativas, consulte estados de deuda y administre abonos.</p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowAddCustomerModal(true)}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer flex items-center gap-2"
+            id="btn-add-customer-credit"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Registrar Cliente</span>
+          </button>
         </div>
 
         {/* SEARCH BAR */}
@@ -90,7 +172,7 @@ export default function CreditModule({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
           <input
             type="text"
-            placeholder="Buscar deudor por nombre o RNC/Cédula..."
+            placeholder="Buscar cliente por nombre, RNC/Cédula o celular..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500 shadow-xs"
@@ -104,17 +186,17 @@ export default function CreditModule({
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                 <tr>
-                  <th className="p-3">Cliente</th>
-                  <th className="p-3">RNC / Cédula</th>
+                  <th className="p-3">Cliente / Razón Social</th>
+                  <th className="p-3">RNC / Cédula / Tel.</th>
                   <th className="p-3 text-right">Límite Autorizado</th>
-                  <th className="p-3 text-right">Deuda Pendiente</th>
+                  <th className="p-3 text-right">Deuda Actual</th>
                   <th className="p-3 text-center">Crédito Disponible</th>
                   <th className="p-3 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((c) => {
-                  const available = c.creditLimit - c.currentDebt;
+                  const available = (c.creditLimit || 0) - (c.currentDebt || 0);
                   const ratio = c.creditLimit > 0 ? (c.currentDebt / c.creditLimit) * 100 : 0;
                   const isCritical = ratio >= 80;
 
@@ -123,29 +205,58 @@ export default function CreditModule({
                       key={c.id} 
                       className={`hover:bg-slate-50/50 transition-colors ${selectedCustomer?.id === c.id ? "bg-indigo-50/20 font-medium" : ""}`}
                     >
-                      <td className="p-3 font-semibold text-slate-950">{c.name}</td>
-                      <td className="p-3 font-mono font-bold text-slate-400">{c.rncOrCedula || "—"}</td>
-                      <td className="p-3 text-right font-mono text-slate-600">${c.creditLimit.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono font-bold text-rose-500">${c.currentDebt.toFixed(2)}</td>
+                      <td className="p-3">
+                        <p className="font-bold text-slate-950">{c.name}</p>
+                        <p className="text-[10px] text-slate-400 font-mono">{c.email}</p>
+                      </td>
+                      <td className="p-3">
+                        <p className="font-mono font-bold text-slate-600">{c.rncOrCedula || "Sin RNC"}</p>
+                        <p className="text-[10px] text-slate-400">{c.phone || "—"}</p>
+                      </td>
+                      <td className="p-3 text-right font-mono text-slate-700 font-bold">
+                        ${(c.creditLimit || 0).toFixed(2)}
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-rose-600">
+                        ${(c.currentDebt || 0).toFixed(2)}
+                      </td>
                       <td className="p-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
-                          isCritical ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono border ${
+                          available <= 0 && c.creditLimit > 0
+                            ? "bg-rose-50 text-rose-600 border-rose-100"
+                            : isCritical 
+                            ? "bg-amber-50 text-amber-600 border-amber-100"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-100"
                         }`}>
                           ${available.toFixed(2)}
                         </span>
                       </td>
                       <td className="p-3 text-center">
-                        <button
-                          onClick={() => setSelectedCustomer(c)}
-                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-[11px] font-semibold transition-all cursor-pointer"
-                        >
-                          Ver Cuenta / Cobrar
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCustomer(c)}
+                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
+                          >
+                            Ver / Abonar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCreditLimitCust(c);
+                              setEditLimitInput((c.creditLimit || 0).toString());
+                            }}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-all cursor-pointer"
+                            title="Editar Límite de Crédito"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
+
             </table>
           </div>
         </div>
@@ -269,6 +380,181 @@ export default function CreditModule({
         )}
       </div>
 
+      {/* REGISTRAR CLIENTE CON LIMITE DE CREDITO MODAL */}
+
+      {showAddCustomerModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4" id="modal-add-customer">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-fadeIn text-white">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-500/20">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Registrar Nuevo Cliente</h3>
+                  <p className="text-[10px] text-slate-400">Crear ficha de cliente y asignar línea de crédito</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomerModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRegisterCustomer} className="space-y-3.5 pt-1">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Nombre o Razón Social *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. Comercializadora del Caribe S.R.L."
+                  value={newCustName}
+                  onChange={(e) => setNewCustName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500 font-bold"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">RNC / Cédula</label>
+                  <input
+                    type="text"
+                    placeholder="101010101"
+                    value={newCustRnc}
+                    onChange={(e) => setNewCustRnc(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Teléfono *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="809-555-0199"
+                    value={newCustPhone}
+                    onChange={(e) => setNewCustPhone(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Correo Electrónico</label>
+                <input
+                  type="email"
+                  placeholder="info@empresa.com"
+                  value={newCustEmail}
+                  onChange={(e) => setNewCustEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">Límite de Crédito Autorizado (DOP $) *</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-emerald-400">$</span>
+                  <input
+                    type="number"
+                    step="500"
+                    min="0"
+                    required
+                    placeholder="10000.00"
+                    value={newCustLimit}
+                    onChange={(e) => setNewCustLimit(e.target.value)}
+                    className="w-full bg-slate-950 border border-emerald-500/50 rounded-xl pl-8 pr-3 py-2.5 text-sm font-mono font-extrabold text-emerald-400 focus:outline-hidden focus:border-emerald-400"
+                  />
+                </div>
+                <p className="text-[9.5px] text-slate-500 mt-1">Monto máximo que el cliente puede comprar fiado / a crédito en POS.</p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomerModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 cursor-pointer"
+                >
+                  Guardar Cliente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT CREDIT LIMIT MODAL */}
+      {editingCreditLimitCust && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4" id="modal-edit-credit-limit">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-fadeIn text-white">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-600 rounded-xl text-white">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Modificar Límite de Crédito</h3>
+                  <p className="text-[10px] text-slate-400">{editingCreditLimitCust.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCreditLimitCust(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditCreditLimit} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Nuevo Límite de Crédito Autorizado (DOP $)</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-emerald-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    step="500"
+                    min="0"
+                    required
+                    value={editLimitInput}
+                    onChange={(e) => setEditLimitInput(e.target.value)}
+                    className="w-full bg-slate-950 border border-emerald-500/50 rounded-xl pl-8 pr-3.5 py-2.5 text-sm font-mono font-extrabold text-emerald-400 focus:outline-hidden focus:border-emerald-400"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  Deuda actual: <strong className="text-rose-400">${(editingCreditLimitCust.currentDebt || 0).toFixed(2)}</strong>
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingCreditLimitCust(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 cursor-pointer"
+                >
+                  Actualizar Límite
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
