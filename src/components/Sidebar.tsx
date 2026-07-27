@@ -7,7 +7,8 @@ import {
   Layers, Database, CalendarClock, DollarSign, Shirt,
   Landmark, TrendingUp, Globe, Lock, Smartphone, BookOpen
 } from "lucide-react";
-import { Company, User, Branch } from "../types";
+import { Company, User, Branch, isTabAllowedForUser, getAllowedTabsForUser } from "../types";
+
 
 interface SidebarProps {
   companies: Company[];
@@ -68,20 +69,9 @@ export default function Sidebar({
       setCurrentUser(showPinPrompt);
       
       // Reset active tab if permissions are restricted for the new role
-      const isAllowed = (tabId: string, role: string) => {
-        if (role === "Propietario" || role === "Administrador") return true;
-        if (role === "Cajero") return ["pos", "config", "caja_avanzada"].includes(tabId);
-        if (role === "Encargado de inventario") return ["inventario", "compras", "reportes", "manufactura"].includes(tabId);
-        if (role === "Vendedor") return ["pos", "restaurante"].includes(tabId);
-        if (role === "Contador") return ["reportes", "reportes_financieros", "gastos"].includes(tabId);
-        if (role === "Analista") return ["reportes", "reportes_financieros"].includes(tabId);
-        return false;
-      };
-
-      if (!isAllowed(activeTab, showPinPrompt.role)) {
-        const fallbackTabs = ["pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos", "caja_avanzada", "reportes_financieros", "manufactura", "ecommerce", "suscripciones", "ncf", "nomina", "delivery", "integraciones", "cotizaciones", "reportes", "config"];
-        const firstTab = fallbackTabs.find(t => isAllowed(t, showPinPrompt.role));
-        setActiveTab(firstTab || "pos");
+      if (!isTabAllowedForUser(activeTab, showPinPrompt, activeCompany)) {
+        const allowedTabs = getAllowedTabsForUser(showPinPrompt, activeCompany);
+        setActiveTab(allowedTabs[0] || "pos");
       }
       
       setShowPinPrompt(null);
@@ -125,43 +115,8 @@ export default function Sidebar({
     { id: "global_audit", name: "Consola Auditoría Global", icon: Database, module: "superadmin" }
   ];
 
-  const filteredMenuItems = menuItems.filter((item) => {
-    // SuperAdmin items for SuperAdmin/Dev role or company comp_admin or superadmin permission
-    if (item.module === "superadmin") {
-      return currentUser.role === "SuperAdmin" || currentUser.permissions?.includes("superadmin") || currentUser.role === "Propietario" || activeCompany.id === "comp_admin";
-    }
+  const filteredMenuItems = menuItems.filter((item) => isTabAllowedForUser(item.id, currentUser, activeCompany));
 
-    // Core POS module is always available if active
-    if (item.module === "pos") return true;
-
-    // Check if the module is enabled in activeCompany.activeModules or if company is comp_admin
-    const isModuleActive = activeCompany.activeModules.includes(item.module) || activeCompany.id === "comp_admin";
-    if (!isModuleActive) return false;
-
-    // If user is SuperAdmin or Propietario or has "all" permission, allow active modules
-    if (currentUser.role === "SuperAdmin" || currentUser.role === "Propietario" || currentUser.permissions?.includes("all")) {
-      return true;
-    }
-    
-    // Basic permissions filtering
-    if (currentUser.role === "Cajero" && !["pos", "config", "caja_avanzada"].includes(item.id)) {
-      return false;
-    }
-    if (currentUser.role === "Encargado de inventario" && !["inventario", "compras", "reportes", "manufactura"].includes(item.id)) {
-      return false;
-    }
-    if (currentUser.role === "Vendedor" && !["pos", "restaurante"].includes(item.id)) {
-      return false;
-    }
-    if (currentUser.role === "Contador" && !["reportes", "reportes_financieros", "gastos", "contabilidad"].includes(item.id)) {
-      return false;
-    }
-    if (currentUser.role === "Analista" && !["reportes", "reportes_financieros"].includes(item.id)) {
-      return false;
-    }
-    // Module availability filtering
-    return activeCompany.activeModules.includes(item.module);
-  });
 
   return (
     <div className={`transition-all duration-300 ${isCollapsed ? "w-20" : "w-72"} bg-white text-slate-700 flex flex-col h-full border-r border-slate-200 shrink-0`} id="sidebar-container">

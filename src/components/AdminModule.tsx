@@ -168,7 +168,13 @@ export default function AdminModule({
       return;
     }
 
+    if (!editingUser && userForm.role === "Propietario") {
+      alert("Solo puede existir un usuario maestro Propietario por empresa.");
+      return;
+    }
+
     let updatedUsersList: User[];
+
 
     if (editingUser) {
       // Edit
@@ -295,8 +301,9 @@ export default function AdminModule({
     alert(`Almacén "${newWh.name}" creado con éxito.`);
   };
 
-  // Roles available for selection
-  const allRolesList = [...Object.keys(INITIAL_ROLE_TEMPLATES), ...Object.keys(customRoles)];
+  // Roles available for selection (Propietario is reserved for Master User only)
+  const assignableRolesList = [...Object.keys(INITIAL_ROLE_TEMPLATES), ...Object.keys(customRoles)].filter(r => r !== "Propietario");
+
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50" id="admin-module-root">
@@ -404,13 +411,14 @@ export default function AdminModule({
                       </div>
                       <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-sm tracking-wider ${
                         user.role === "Propietario" 
-                          ? "bg-red-50 text-red-600 border border-red-100" 
+                          ? "bg-amber-50 text-amber-700 border border-amber-200" 
                           : user.role === "Administrador"
                           ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
                           : "bg-slate-100 text-slate-600 border border-slate-200"
                       }`}>
-                        {user.role}
+                        {user.role === "Propietario" ? "👑 Propietario (Maestro)" : user.role}
                       </span>
+
                     </div>
 
                     <div className="space-y-2 border-t border-slate-150 pt-3">
@@ -721,14 +729,24 @@ export default function AdminModule({
                 <label className="text-[11px] font-bold text-slate-700 block">Rol Comercial *</label>
                 <select
                   value={userForm.role}
+                  disabled={editingUser?.role === "Propietario"}
                   onChange={(e) => handleRoleChangeInForm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden focus:border-indigo-500 font-semibold text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden focus:border-indigo-500 font-semibold text-slate-800 disabled:opacity-70 disabled:bg-slate-100 cursor-pointer"
                 >
-                  {allRolesList.map((r) => (
+                  {editingUser?.role === "Propietario" && (
+                    <option value="Propietario">👑 Propietario (Usuario Maestro)</option>
+                  )}
+                  {assignableRolesList.map((r) => (
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
+                {editingUser?.role === "Propietario" && (
+                  <span className="text-[10px] text-amber-700 font-semibold block">
+                    El rol del Usuario Maestro Propietario es único e inmodificable.
+                  </span>
+                )}
               </div>
+
             </div>
 
             {/* RESTRICT BRANCHES */}

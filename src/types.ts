@@ -339,3 +339,154 @@ export interface JournalEntry {
   createdBy: string;
   lines: JournalEntryLine[];
 }
+
+// Module keys and tab IDs mapping
+export const MODULE_TAB_MAPPING: Record<string, string> = {
+  pos: "pos",
+  inventario: "inventario",
+  restaurante: "restaurante",
+  clientes: "clientes",
+  fidelizacion: "fidelizacion",
+  compras: "compras",
+  gastos: "gastos",
+  caja_avanzada: "caja_avanzada",
+  contabilidad: "contabilidad",
+  reportes_financieros: "reportes_financieros",
+  manufactura: "manufactura",
+  ecommerce: "ecommerce",
+  suscripciones: "suscripciones",
+  ncf: "facturacion_fiscal",
+  nomina: "nomina",
+  delivery: "delivery",
+  android_app: "android_app",
+  integraciones: "integraciones",
+  cotizaciones: "cotizaciones",
+  reportes: "reportes",
+  config: "pos",
+  superadmin: "superadmin",
+  global_audit: "superadmin"
+};
+
+// Standard role tab permission definitions
+export const ROLE_ALLOWED_TABS: Record<string, string[]> = {
+  SuperAdmin: [
+    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
+    "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
+    "cotizaciones", "reportes", "config", "superadmin", "global_audit"
+  ],
+  Propietario: [
+    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
+    "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
+    "cotizaciones", "reportes", "config"
+  ],
+  Administrador: [
+    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
+    "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
+    "cotizaciones", "reportes", "config"
+  ],
+  Supervisor: [
+    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "caja_avanzada", "delivery", "cotizaciones", "reportes"
+  ],
+  Vendedor: [
+    "pos", "restaurante", "cotizaciones", "clientes", "fidelizacion"
+  ],
+  Cajero: [
+    "pos", "caja_avanzada", "clientes"
+  ],
+  "Encargado de inventario": [
+    "inventario", "compras", "manufactura", "reportes"
+  ],
+  Contador: [
+    "contabilidad", "reportes_financieros", "gastos", "ncf", "compras", "reportes"
+  ],
+  Analista: [
+    "reportes", "reportes_financieros"
+  ],
+  "Usuario de consulta": [
+    "reportes"
+  ]
+};
+
+// Permission key to tab fallback map
+export const PERMISSION_TO_TABS: Record<string, string[]> = {
+  prod_ver: ["inventario", "pos"],
+  prod_crear: ["inventario"],
+  prod_precios: ["inventario", "pos"],
+  pos_descuentos: ["pos"],
+  pos_eliminar_linea: ["pos"],
+  pos_anular_venta: ["pos"],
+  pos_abrir_caja: ["pos", "caja_avanzada"],
+  pos_cerrar_caja: ["pos", "caja_avanzada"],
+  reportes_ver_costos: ["reportes", "reportes_financieros"],
+  reportes_ver_ganancias: ["reportes", "reportes_financieros"],
+  inv_ajustar: ["inventario"],
+  reportes_exportar: ["reportes"],
+  admin_usuarios: ["config"],
+  offline_trabajar: ["pos"],
+  aprobar_sensibles: ["pos", "config"]
+};
+
+export function isTabAllowedForUser(tabId: string, user: User | null, company: Company | null): boolean {
+  if (!user || !company) return false;
+
+  // 1. Superadmin tab check
+  if (tabId === "superadmin" || tabId === "global_audit") {
+    return user.role === "SuperAdmin" || user.permissions?.includes("superadmin") || company.id === "comp_admin";
+  }
+
+  // 2. Check if the underlying module is enabled in activeCompany
+  const requiredModule = MODULE_TAB_MAPPING[tabId];
+  if (requiredModule && requiredModule !== "superadmin") {
+    if (requiredModule !== "pos" && company.id !== "comp_admin" && !company.activeModules?.includes(requiredModule)) {
+      return false;
+    }
+  }
+
+  // 3. SuperAdmin or Propietario with all access
+  if (user.role === "SuperAdmin") return true;
+  if (user.role === "Propietario") return true;
+
+  // 4. Role whitelist check
+  const allowedTabsByRole = ROLE_ALLOWED_TABS[user.role];
+  if (allowedTabsByRole && allowedTabsByRole.includes(tabId)) {
+    return true;
+  }
+
+  // 5. Granular permissions check
+  if (user.permissions?.includes("all")) {
+    return true;
+  }
+
+  if (user.permissions && user.permissions.length > 0) {
+    for (const permKey of user.permissions) {
+      const tabs = PERMISSION_TO_TABS[permKey];
+      if (tabs && tabs.includes(tabId)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function getAllowedTabsForUser(user: User | null, company: Company | null): string[] {
+  if (!user || !company) return ["pos"];
+  const allTabs = [
+    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
+    "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
+    "cotizaciones", "reportes", "config"
+  ];
+
+  if (user.role === "SuperAdmin" || user.permissions?.includes("superadmin") || company.id === "comp_admin") {
+    allTabs.push("superadmin", "global_audit");
+  }
+
+  const filtered = allTabs.filter(t => isTabAllowedForUser(t, user, company));
+  return filtered.length > 0 ? filtered : ["pos"];
+}
+

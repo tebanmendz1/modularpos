@@ -32,7 +32,8 @@ import SuperAdminModule from "./components/SuperAdminModule";
 import PublicStorefront from "./components/PublicStorefront";
 import AndroidMobileAppModule from "./components/AndroidMobileAppModule";
 import AccountingModule from "./components/AccountingModule";
-import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType } from "./types";
+import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser } from "./types";
+
 
 export default function App() {
   // Global States loaded from Server or LocalStorage
@@ -618,58 +619,6 @@ export default function App() {
     return nameStr.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
   };
 
-  const getAllowedTabsForRole = (role: string, activeModules: string[]): string[] => {
-    const allItems = [
-      { id: "pos", module: "pos" },
-      { id: "inventario", module: "inventario" },
-      { id: "restaurante", module: "restaurante" },
-      { id: "clientes", module: "clientes" },
-      { id: "fidelizacion", module: "fidelizacion" },
-      { id: "compras", module: "compras" },
-      { id: "gastos", module: "gastos" },
-      { id: "caja_avanzada", module: "caja_avanzada" },
-      { id: "contabilidad", module: "contabilidad" },
-      { id: "reportes_financieros", module: "reportes_financieros" },
-      { id: "manufactura", module: "manufactura" },
-      { id: "ecommerce", module: "ecommerce" },
-      { id: "suscripciones", module: "suscripciones" },
-      { id: "ncf", module: "facturacion_fiscal" },
-      { id: "nomina", module: "nomina" },
-      { id: "delivery", module: "delivery" },
-      { id: "android_app", module: "android_app" },
-      { id: "integraciones", module: "integraciones" },
-      { id: "cotizaciones", module: "cotizaciones" },
-      { id: "reportes", module: "reportes" },
-      { id: "config", module: "pos" },
-      { id: "superadmin", module: "superadmin" },
-      { id: "global_audit", module: "superadmin" }
-    ];
-
-    return allItems.filter(item => {
-      if (item.module === "superadmin") {
-        return role === "SuperAdmin" || role === "Propietario";
-      }
-      if (item.module === "pos") return true;
-      if (!activeModules.includes(item.module) && activeCompany?.id !== "comp_admin") return false;
-      if (role === "SuperAdmin" || role === "Propietario" || role === "Administrador") return true;
-      if (role === "Cajero") {
-        return ["pos", "config", "caja_avanzada"].includes(item.id);
-      }
-      if (role === "Encargado de inventario") {
-        return ["inventario", "compras", "reportes", "manufactura"].includes(item.id);
-      }
-      if (role === "Vendedor") {
-        return ["pos", "restaurante"].includes(item.id);
-      }
-      if (role === "Contador") {
-        return ["reportes", "reportes_financieros", "gastos"].includes(item.id);
-      }
-      if (role === "Analista") {
-        return ["reportes", "reportes_financieros"].includes(item.id);
-      }
-      return false;
-    }).map(item => item.id);
-  };
 
   if (loading) {
     return (
@@ -758,8 +707,9 @@ export default function App() {
       setActiveBranch(newBranch);
       setCurrentUser(newUser);
 
-      const allowed = getAllowedTabsForRole(newUser.role, newCompany.activeModules);
+      const allowed = getAllowedTabsForUser(newUser, newCompany);
       setActiveTab(allowed[0] || "pos");
+
 
       if (isOnline) {
         saveDbStateToServer({
@@ -805,7 +755,7 @@ export default function App() {
           setActiveCompany(company);
           setActiveBranch(branch);
           setCurrentUser(user);
-          const allowed = getAllowedTabsForRole(user.role, company.activeModules);
+          const allowed = getAllowedTabsForUser(user, company);
           if (allowed.length > 0) {
             setActiveTab(allowed[0]);
           } else {
@@ -813,6 +763,7 @@ export default function App() {
           }
           handleAddAudit("Login", `Inicio de sesión exitoso para ${user.name} (${user.role})`);
         }}
+
         onRegisterCompanyAndUser={handleRegisterCompanyAndUser}
         onUpdateUserPin={handleUpdateUserPin}
       />
@@ -898,7 +849,30 @@ export default function App() {
         {/* ACTIVE TABS DISPATCH PANEL */}
         <div className="flex-1 flex overflow-hidden min-h-0" id="viewport-workspace-active">
           
-          {/* TAB: POS OPERATOR REGISTER */}
+          {!isTabAllowedForUser(activeTab, currentUser, activeCompany) ? (
+            <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center p-8 text-center" id="access-denied-view">
+              <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-3xl flex items-center justify-center mb-4 shadow-xs border border-rose-100">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h2 className="text-base font-black text-slate-900 uppercase tracking-tight">Acceso Restringido - Permisos Insuficientes</h2>
+              <p className="text-xs text-slate-500 max-w-md mt-2 leading-relaxed">
+                El usuario <strong>{currentUser.name}</strong> con rol <strong className="text-slate-700">{currentUser.role}</strong> no dispone de permisos para acceder a la sección <strong className="text-indigo-600">"{activeTab}"</strong> en <strong>{activeCompany.name}</strong>.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const allowed = getAllowedTabsForUser(currentUser, activeCompany);
+                  setActiveTab(allowed[0] || "pos");
+                }}
+                className="mt-6 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+              >
+                <span>Ir a mi Módulo Principal Autorizado</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <>
+
           {activeTab === "pos" && (
             <POSModule
               activeCompany={activeCompany}
@@ -1274,8 +1248,11 @@ export default function App() {
               </div>
             </div>
           )}
+            </>
+          )}
 
         </div>
+
         
         {/* FOOTER STATUS BAR */}
         <footer className="h-8 bg-slate-800 text-slate-400 text-[10px] px-4 flex items-center justify-between shrink-0 border-t border-slate-700" id="footer-status-bar">
