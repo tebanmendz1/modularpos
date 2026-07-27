@@ -397,22 +397,37 @@ export default function POSModule({
   };
 
   // Specialized thermal printing helper for completed POS sales with solid black, high-contrast typography
+  // Safe in-frame thermal printing (using hidden iframe to prevent white screen and popup blocker issues)
   const handlePrintCompletedReceipt = () => {
     const printContent = document.getElementById("thermal-ticket-layout")?.innerHTML;
     if (!printContent) return;
 
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(`
+    let iframe = document.getElementById("silent-print-iframe") as HTMLIFrameElement | null;
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "silent-print-iframe";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+    }
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
         <html>
           <head>
-            <title>Recibo de Pago - Transacción ${completedSale?.id || ""}</title>
+            <title>Recibo de Pago - POS</title>
             <style>
               @page {
                 size: 80mm auto;
                 margin: 0;
               }
-              /* For thermal printer 100% contrast, override all colors to solid black and use high legibility sans-serif */
               body {
                 font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
                 width: 76mm;
@@ -423,7 +438,6 @@ export default function POSModule({
                 color: #000;
                 background-color: #fff;
                 -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
               }
               .text-center { text-align: center; }
               .text-right { text-align: right; }
@@ -434,10 +448,8 @@ export default function POSModule({
               .border-t { border-top: 1px solid #000; }
               .py-1 { padding-top: 4px; padding-bottom: 4px; }
               .py-2 { padding-top: 8px; padding-bottom: 8px; }
-              .py-2\\.5 { padding-top: 10px; padding-bottom: 10px; }
               .my-2 { margin-top: 8px; margin-bottom: 8px; }
               .space-y-1 > * + * { margin-top: 4px; }
-              .space-y-1\\.5 > * + * { margin-top: 6px; }
               .flex { display: flex; }
               .justify-between { justify-content: space-between; }
               .items-start { align-items: flex-start; }
@@ -447,19 +459,7 @@ export default function POSModule({
               .break-all { word-break: break-all; }
               .italic { font-style: italic; }
               .mt-1 { margin-top: 4px; }
-              .mt-1\\.5 { margin-top: 6px; }
               .mt-4 { margin-top: 16px; }
-              .pt-1 { padding-top: 4px; }
-              .pt-3 { padding-top: 12px; }
-              .pb-2.5 { padding-bottom: 10px; }
-              .mb-2 { margin-bottom: 8px; }
-              .font-semibold { font-weight: 600; }
-              .text-[10.5px] { font-size: 11px; }
-              .text-[10px] { font-size: 11px; }
-              .text-[9px] { font-size: 10px; }
-              .text-[8px] { font-size: 9px; }
-              .text-xs { font-size: 13px; font-weight: bold; }
-              /* Force absolute black text to prevent blurry color-dithering on thermal printer */
               .text-slate-700, .text-slate-600, .text-slate-500, .text-slate-400, .text-sky-700, .text-rose-600 { 
                 color: #000 !important; 
               }
@@ -472,38 +472,24 @@ export default function POSModule({
                 font-family: Consolas, "SF Mono", Monaco, "Courier New", monospace; 
                 font-weight: bold; 
               }
-              @media print {
-                body { width: 76mm; margin: 0; padding: 10px 4px; }
-              }
             </style>
           </head>
           <body>
             ${printContent}
-            <script>
-              window.onload = function() {
-                window.print();
-                setTimeout(function() { window.close(); }, 500);
-              };
-            </script>
           </body>
         </html>
       `);
-      printWindow.document.close();
-    } else {
-      alert("La ventana emergente de impresión fue bloqueada por el navegador. Habilitación requerida para imprimir tickets automáticamente, o use el botón secundario.");
-      window.print();
+      doc.close();
+
+      setTimeout(() => {
+        if (iframe?.contentWindow) {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        }
+      }, 150);
     }
   };
 
-  // Automatically trigger thermal print dialog on successful POS checkout
-  useEffect(() => {
-    if (completedSale) {
-      const timer = setTimeout(() => {
-        handlePrintCompletedReceipt();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [completedSale]);
 
   // Barcode Scanner States
   const [scanFeedback, setScanFeedback] = useState("");
@@ -518,6 +504,11 @@ export default function POSModule({
   const [fiscalLookupStatus, setFiscalLookupStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
   const [fiscalLookupActivity, setFiscalLookupActivity] = useState("");
   const [fiscalLookupAddress, setFiscalLookupAddress] = useState("");
+
+  // Interactive Modals (replacing browser native confirm/prompt alerts)
+  const [showConfirmCartReset, setShowConfirmCartReset] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+
 
   const handleFiscalRncLookup = (rnc: string) => {
     const cleanRnc = rnc.trim();
@@ -629,10 +620,7 @@ export default function POSModule({
         if (notesInput) {
           notesInput.focus();
         } else {
-          const newNotes = window.prompt("Ingrese observaciones del pedido / factura:", notes);
-          if (newNotes !== null) {
-            setNotes(newNotes);
-          }
+          setShowNotesModal(true);
         }
         return;
       }
@@ -682,18 +670,11 @@ export default function POSModule({
       if (e.altKey && (e.key.toLowerCase() === "v" || e.code === "KeyV" || e.key.toLowerCase() === "l" || e.code === "KeyL")) {
         e.preventDefault();
         if (cart.length > 0) {
-          if (window.confirm("¿Está seguro de vaciar el carrito actual?")) {
-            setCart([]);
-            setSelectedCustomer(null);
-            setCartDiscount(0);
-            setNotes("");
-            setIsWebOrder(false);
-            setPaymentMethod("Efectivo");
-            onAddAudit("Vaciar Carrito", "Se limpiaron todos los productos del carrito actual con atajo de teclado");
-          }
+          setShowConfirmCartReset(true);
         }
         return;
       }
+
 
       // 13. Alt + R: Restore Suspended Sales
       if (e.altKey && (e.key.toLowerCase() === "r" || e.code === "KeyR")) {
@@ -778,9 +759,11 @@ export default function POSModule({
   const addToCart = (product: Product, variantSelection?: string) => {
     // Check permission to sell
     if (currentUser.role === "Encargado de inventario") {
-      alert("Su rol no dispone de permisos de venta.");
+      setRuleErrorModalMsg("❌ ACCESO RESTRINGIDO: Su rol de Encargado de Inventario no dispone de permisos para facturar o efectuar ventas.");
+      setShowRuleErrorModal(true);
       return;
     }
+
 
     if (product.isWeighable) {
       setWeighingProduct(product);
@@ -865,8 +848,10 @@ export default function POSModule({
           // ignore
         }
       } else {
-        alert(`Producto o código "${code}" no encontrado.`);
+        setRuleErrorModalMsg(`❌ BÚSQUEDA SIN RESULTADOS: El producto o código de barras "${code}" no existe o no está registrado en el catálogo.`);
+        setShowRuleErrorModal(true);
       }
+
     }
   };
 
@@ -1099,7 +1084,9 @@ export default function POSModule({
 
     // If customer is required
     if (activeCompany.settings?.requireCustomer && !selectedCustomer) {
-      alert("Esta empresa requiere registrar un cliente antes de facturar.");
+      setShowCheckout(false);
+      setRuleErrorModalMsg("❌ REGLA DE FACTURACIÓN: Esta empresa requiere seleccionar o registrar un cliente antes de emitir la factura.");
+      setShowRuleErrorModal(true);
       return;
     }
 
@@ -1111,15 +1098,20 @@ export default function POSModule({
     // Credit limit check
     if (paymentMethod === "Crédito") {
       if (!selectedCustomer) {
-        alert("Para vender a crédito debe seleccionar un cliente.");
+        setShowCheckout(false);
+        setRuleErrorModalMsg("❌ REGLA DE CRÉDITO: Para realizar una venta a crédito debe seleccionar un cliente registrado.");
+        setShowRuleErrorModal(true);
         return;
       }
       const remainingCredit = selectedCustomer.creditLimit - selectedCustomer.currentDebt;
       if (total > remainingCredit) {
-        alert(`Límite de crédito excedido. Crédito disponible: $${remainingCredit.toFixed(2)}`);
+        setShowCheckout(false);
+        setRuleErrorModalMsg(`❌ REGLA DE CRÉDITO: Límite de crédito excedido. El total de la venta ($${total.toFixed(2)}) supera el crédito disponible del cliente ($${remainingCredit.toFixed(2)}).`);
+        setShowRuleErrorModal(true);
         return;
       }
     }
+
 
     // Points updates
     let pointsRedeemed = 0;
@@ -2384,28 +2376,60 @@ export default function POSModule({
               </div>
             </div>
 
-            {/* Print and Close buttons */}
-            <div className="flex gap-2 w-full max-w-72 mt-4">
+            {/* Print and Actions buttons */}
+            <div className="flex flex-col gap-2 w-full max-w-72 mt-4">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintCompletedReceipt}
+                  className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all"
+                  id="btn-print-receipt"
+                >
+                  <Printer className="w-4 h-4 text-sky-400" />
+                  <span>Imprimir Ticket</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `Factura ${completedSale.id} - ${activeCompany.name}. Total: DOP$${completedSale.total.toFixed(2)}. ${completedSale.ncf ? `NCF: ${completedSale.ncf}` : ''}`;
+                    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+                  }}
+                  className="px-3 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-500 flex items-center justify-center gap-1 cursor-pointer shadow-md transition-all"
+                  title="Compartir por WhatsApp"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>WhatsApp</span>
+                </button>
+              </div>
+
               <button
-                onClick={handlePrintCompletedReceipt}
-                className="flex-1 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-900 flex items-center justify-center gap-1 cursor-pointer"
-                id="btn-print-receipt"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Imprimir
-              </button>
-              <button
-                onClick={() => setCompletedSale(null)}
-                className="flex-1 py-2 bg-sky-600 text-white rounded-xl text-xs font-semibold hover:bg-sky-700 flex items-center justify-center gap-1 cursor-pointer"
+                type="button"
+                onClick={() => {
+                  setCompletedSale(null);
+                  setShowCheckout(false);
+                  setCart([]);
+                  setSelectedCustomer(null);
+                  setCartDiscount(0);
+                  setNotes("");
+                  setCashPaid("");
+                  setCardLast4("");
+                  setSplitCash("");
+                  setSplitCard("");
+                  setIsWebOrder(false);
+                  setPaymentMethod("Efectivo");
+                }}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/20 transition-all"
                 id="btn-close-receipt"
               >
-                <Check className="w-3.5 h-3.5" />
-                Aceptar
+                <Check className="w-4 h-4" />
+                <span>Iniciar Nueva Venta</span>
               </button>
             </div>
           </div>
         </div>
       )}
+
 
       {/* CASH REGISTERS TURN CLOSE MODAL */}
       {showCashCloseModal && activeSession && (
@@ -2963,6 +2987,99 @@ export default function POSModule({
           </div>
         </div>
       )}
+
+      {/* CONFIRM CART RESET VACIAR CARRITO MODAL */}
+      {showConfirmCartReset && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4" id="modal-confirm-cart-reset">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-fadeIn">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-2xl text-amber-400">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-white text-base">Vaciar Carrito Actual</h3>
+                <p className="text-[11px] text-slate-400">Confirmación de eliminación de artículos</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              ¿Está seguro de limpiar y remover todos los <strong>{cart.length} productos</strong> agregados a la orden actual?
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfirmCartReset(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCart([]);
+                  setSelectedCustomer(null);
+                  setCartDiscount(0);
+                  setNotes("");
+                  setIsWebOrder(false);
+                  setPaymentMethod("Efectivo");
+                  setShowConfirmCartReset(false);
+                  onAddAudit("Vaciar Carrito", "Se limpiaron todos los productos del carrito actual");
+                }}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/20 cursor-pointer"
+              >
+                Sí, Vaciar Carrito
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ORDER NOTES MODAL */}
+      {showNotesModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4" id="modal-order-notes">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Observaciones del Pedido</h3>
+                  <p className="text-[10px] text-slate-400">Notas para cocina, comanda o factura</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNotesModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <textarea
+              rows={4}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Ej. Sin cebolla, entregar en la puerta de servicio, factura a crédito..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-indigo-500 resize-none font-sans"
+              autoFocus
+            />
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowNotesModal(false)}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md cursor-pointer"
+              >
+                Guardar Notas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+
 }
