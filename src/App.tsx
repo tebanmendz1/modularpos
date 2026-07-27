@@ -32,7 +32,8 @@ import SuperAdminModule from "./components/SuperAdminModule";
 import PublicStorefront from "./components/PublicStorefront";
 import AndroidMobileAppModule from "./components/AndroidMobileAppModule";
 import AccountingModule from "./components/AccountingModule";
-import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser } from "./types";
+import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser, isDemoCompany } from "./types";
+
 
 
 export default function App() {
@@ -227,6 +228,12 @@ export default function App() {
       ...customState
     };
 
+    // Demo companies operate in isolated sandbox session; changes reset on server restart / 24h
+    if (isDemoCompany(activeCompany?.id)) {
+      localStorage.setItem("pos_db_backup", JSON.stringify(stateToSave));
+      return;
+    }
+
     try {
       await fetch("/api/db/update", {
         method: "POST",
@@ -238,6 +245,7 @@ export default function App() {
     } catch (err) {
       console.error("Error al persistir base de datos en el servidor", err);
     }
+
   };
 
   // Helper to add queue item offline
@@ -845,6 +853,22 @@ export default function App() {
             </div>
           </div>
         </header>
+
+        {/* DEMO MODE NOTICE BANNER */}
+        {isDemoCompany(activeCompany.id) && (
+          <div className="bg-amber-500 text-amber-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-xs shrink-0 border-b border-amber-600 animate-fadeIn" id="demo-mode-notice-banner">
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-amber-950 shrink-0" />
+              <span>
+                <strong>Modo Demostración Activo:</strong> Estás utilizando una cuenta demo para explorar el sistema. Toda modificación o prueba realizada en esta empresa se restablece automáticamente cada 24 horas.
+              </span>
+            </div>
+            <span className="bg-amber-950 text-amber-100 text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-md font-black shrink-0 hidden md:inline">
+              Solo Prueba
+            </span>
+          </div>
+        )}
+
 
         {/* ACTIVE TABS DISPATCH PANEL */}
         <div className="flex-1 flex overflow-hidden min-h-0" id="viewport-workspace-active">

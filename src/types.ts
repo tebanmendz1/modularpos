@@ -490,3 +490,9 @@ export function getAllowedTabsForUser(user: User | null, company: Company | null
   return filtered.length > 0 ? filtered : ["pos"];
 }
 
+export function isDemoCompany(companyId: string | undefined | null): boolean {
+  if (!companyId) return false;
+  return ["comp_supermercado", "comp_bistro", "comp_boutique"].includes(companyId);
+}
+
+

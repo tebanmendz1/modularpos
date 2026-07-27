@@ -393,58 +393,53 @@ export default function LoginModule({
 
             {/* DEMO ACCOUNTS QUICK SELECTOR CARD */}
             {showDemoAccounts && (
-              <div className="mb-5 bg-slate-950/80 border border-sky-500/30 rounded-2xl p-3.5 space-y-2 animate-fadeIn">
+              <div className="mb-5 bg-slate-950/80 border border-sky-500/30 rounded-2xl p-4 space-y-3 animate-fadeIn">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <span className="text-[11px] font-bold text-sky-300 uppercase tracking-wider">Cuentas Demo Disponibles</span>
+                  <span className="text-[11px] font-bold text-sky-300 uppercase tracking-wider">Cuentas Demo de Exploración</span>
                   <span className="text-[10px] text-slate-500">Haz clic para auto-llenar</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickLoadDemo("SuperAdmin", "Desarrollador", "000000")}
-                    className="p-2 bg-indigo-950/80 hover:bg-indigo-900/90 border border-indigo-500/50 rounded-xl text-left transition-all cursor-pointer group shadow-sm"
-                  >
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-black text-indigo-300 truncate group-hover:text-white">⭐ Super Admin / Dev</p>
-                      <span className="text-[8px] bg-indigo-500 text-white font-extrabold px-1.5 py-0.5 rounded uppercase">ROOT</span>
-                    </div>
-                    <p className="text-[10px] text-slate-300 font-medium">Empresa: SuperAdmin</p>
-                    <p className="text-[10px] text-slate-400">Usuario: Desarrollador</p>
-                    <p className="text-[9px] font-mono text-emerald-400 font-bold mt-0.5">PIN: 000000</p>
-                  </button>
 
+                <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-2 text-[11px] text-amber-200">
+                  <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    <strong>Aviso Modo Demo:</strong> Estas cuentas son exclusivamente para evaluar y conocer las funciones del sistema. Cualquier prueba o modificación realizada en estos negocios demo se restablece automáticamente cada 24 horas.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
                   <button
                     type="button"
                     onClick={() => handleQuickLoadDemo("Supermercado Don Pablo", "Juan Pablo", "111111")}
-                    className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-left transition-all cursor-pointer group"
+                    className="p-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-left transition-all cursor-pointer group shadow-2xs"
                   >
                     <p className="text-[11px] font-bold text-white truncate group-hover:text-sky-400">Supermercado Don Pablo</p>
-                    <p className="text-[10px] text-slate-400">Usuario: Juan Pablo</p>
-                    <p className="text-[9px] font-mono text-emerald-400 mt-0.5">PIN: 111111</p>
+                    <p className="text-[10px] text-slate-400">Usuario: Juan Pablo (Propietario)</p>
+                    <p className="text-[9px] font-mono text-emerald-400 mt-1">PIN: 111111</p>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleQuickLoadDemo("Bistro Gourmet & Bar", "Chef Roberto", "444444")}
-                    className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-left transition-all cursor-pointer group"
+                    className="p-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-left transition-all cursor-pointer group shadow-2xs"
                   >
                     <p className="text-[11px] font-bold text-white truncate group-hover:text-amber-400">Bistro Gourmet & Bar</p>
-                    <p className="text-[10px] text-slate-400">Usuario: Chef Roberto</p>
-                    <p className="text-[9px] font-mono text-emerald-400 mt-0.5">PIN: 444444</p>
+                    <p className="text-[10px] text-slate-400">Usuario: Chef Roberto (Admin)</p>
+                    <p className="text-[9px] font-mono text-emerald-400 mt-1">PIN: 444444</p>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleQuickLoadDemo("Boutique Estilo & Moda", "Laura Moda", "777777")}
-                    className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-left transition-all cursor-pointer group"
+                    className="p-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-left transition-all cursor-pointer group shadow-2xs"
                   >
                     <p className="text-[11px] font-bold text-white truncate group-hover:text-pink-400">Boutique Estilo & Moda</p>
-                    <p className="text-[10px] text-slate-400">Usuario: Laura Moda</p>
-                    <p className="text-[9px] font-mono text-emerald-400 mt-0.5">PIN: 777777</p>
+                    <p className="text-[10px] text-slate-400">Usuario: Laura Moda (Propietario)</p>
+                    <p className="text-[9px] font-mono text-emerald-400 mt-1">PIN: 777777</p>
                   </button>
                 </div>
               </div>
             )}
+
 
             {/* THE THREE INPUT FIELDS */}
             <div className="space-y-3.5 mb-5" id="login-fields-container">
