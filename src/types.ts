@@ -107,6 +107,48 @@ export interface Sale {
   notes?: string;
   synced: boolean;
   syncError?: string;
+  ecfDocumentId?: string;
+  ecfStatus?: EcfDocumentStatus;
+}
+
+export type EcfDocumentStatus = "queued" | "processing" | "accepted" | "accepted_conditional" | "rejected" | "error";
+
+export interface EcfProviderConfig {
+  companyId: string;
+  provider: "alanube";
+  environment: "sandbox" | "production";
+  enabled: boolean;
+  providerCompanyId?: string;
+  senderRnc: string;
+  senderLegalName: string;
+  senderCommercialName?: string;
+  senderAddress: string;
+  hasToken: boolean;
+  hasWebhookSecret: boolean;
+  updatedAt: string;
+}
+
+export interface EcfDocument {
+  id: string;
+  companyId: string;
+  branchId?: string;
+  saleId?: string;
+  idempotencyKey: string;
+  type: "E31" | "E32" | "E33" | "E34";
+  provider: "alanube";
+  environment: "sandbox" | "production";
+  status: EcfDocumentStatus;
+  providerDocumentId?: string;
+  trackId?: string;
+  encf?: string;
+  qrUrl?: string;
+  pdfUrl?: string;
+  xmlUrl?: string;
+  securityCode?: string;
+  error?: string;
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AuditLog {

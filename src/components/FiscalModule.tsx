@@ -4,7 +4,7 @@ import {
   BarChart2, Check, Building2, User, Cpu, FileCode, QrCode, Send, KeyRound, 
   Users, AlertCircle, Trash2, Printer, Info, ShieldCheck, Download, Code, ArrowRight
 } from "lucide-react";
-import { Company, Branch, Sale } from "../types";
+import { Company, Branch, Sale, EcfDocument, EcfProviderConfig } from "../types";
 
 interface NcfSequence {
   typeCode: string;
@@ -96,7 +96,7 @@ export default function FiscalModule({
   sales,
   onAddAudit
 }: FiscalModuleProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"sequences" | "sales" | "rnc_validator" | "ecf_signer" | "reports">("sequences");
+  const [activeSubTab, setActiveSubTab] = useState<"settings" | "sequences" | "sales" | "rnc_validator" | "ecf_signer" | "reports">("settings");
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -142,6 +142,48 @@ export default function FiscalModule({
   const [emissionLogs, setEmissionLogs] = useState<string[]>([]);
   const [emittedEcfDetails, setEmittedEcfDetails] = useState<any>(null);
   const [showXMLViewer, setShowXMLViewer] = useState(false);
+  const [providerConfig, setProviderConfig] = useState<EcfProviderConfig | null>(null);
+  const [providerEnvironment, setProviderEnvironment] = useState<"sandbox" | "production">("sandbox");
+  const [providerEnabled, setProviderEnabled] = useState(false);
+  const [providerCompanyId, setProviderCompanyId] = useState("");
+  const [providerToken, setProviderToken] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [senderRnc, setSenderRnc] = useState(activeCompany.rnc || "");
+  const [senderLegalName, setSenderLegalName] = useState(activeCompany.name);
+  const [senderCommercialName, setSenderCommercialName] = useState(activeCompany.name);
+  const [senderAddress, setSenderAddress] = useState(activeBranch.address);
+  const [providerNotice, setProviderNotice] = useState("");
+  const [isSavingProvider, setIsSavingProvider] = useState(false);
+  const [ecfDocuments, setEcfDocuments] = useState<EcfDocument[]>([]);
+
+  const loadEcfIntegration = async () => {
+    try {
+      const [configResponse, documentsResponse] = await Promise.all([
+        fetch(`/api/ecf/config/${encodeURIComponent(activeCompany.id)}`),
+        fetch(`/api/ecf/documents?companyId=${encodeURIComponent(activeCompany.id)}`)
+      ]);
+      const configData = await configResponse.json();
+      const documentsData = await documentsResponse.json();
+      const config = configData.config as EcfProviderConfig | null;
+      setProviderConfig(config);
+      setEcfDocuments(documentsData.documents || []);
+      if (config) {
+        setProviderEnvironment(config.environment);
+        setProviderEnabled(config.enabled);
+        setProviderCompanyId(config.providerCompanyId || "");
+        setSenderRnc(config.senderRnc);
+        setSenderLegalName(config.senderLegalName);
+        setSenderCommercialName(config.senderCommercialName || "");
+        setSenderAddress(config.senderAddress);
+      }
+    } catch {
+      setProviderNotice("No se pudo cargar la configuración e-CF del servidor.");
+    }
+  };
+
+  useEffect(() => {
+    void loadEcfIntegration();
+  }, [activeCompany.id]);
 
   // Filter sales with NCF/e-CF (fiscal sales)
   const fiscalSales = sales.filter(
@@ -375,108 +417,162 @@ export default function FiscalModule({
 </e-CF>`;
   };
 
-  // Real-time e-CF emission and signing
-  const handleEmitEcf = () => {
+  const handleSaveProvider = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSavingProvider(true);
+    setProviderNotice("");
+    try {
+      const response = await fetch(`/api/ecf/config/${encodeURIComponent(activeCompany.id)}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          provider: "alanube",
+          environment: providerEnvironment,
+          enabled: providerEnabled,
+          providerCompanyId,
+          token: providerToken || undefined,
+          webhookSecret: webhookSecret || undefined,
+          senderRnc,
+          senderLegalName,
+          senderCommercialName,
+          senderAddress
+        })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "No se pudo guardar la configuración");
+      setProviderConfig(body.config);
+      setProviderToken("");
+      setWebhookSecret("");
+      setProviderNotice("Configuración de Alanube guardada de forma segura.");
+      onAddAudit("Configuración e-CF", `Alanube ${providerEnvironment} configurado para ${activeCompany.name}.`);
+    } catch (error: any) {
+      setProviderNotice(error.message || "No se pudo guardar la configuración.");
+    } finally {
+      setIsSavingProvider(false);
+    }
+  };
+
+  const handleTestProvider = async () => {
+    setProviderNotice("Probando conexión con Alanube...");
+    try {
+      const response = await fetch(`/api/ecf/config/${encodeURIComponent(activeCompany.id)}/test`, { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Conexión rechazada");
+      setProviderNotice(`Conexión correcta con Alanube (${body.environment}).`);
+    } catch (error: any) {
+      setProviderNotice(error.message || "No se pudo conectar con Alanube.");
+    }
+  };
+
+  const handleEmitEcf = async () => {
     if (ecfProducts.length === 0) {
       alert("Debe agregar al menos un ítem al comprobante fiscal.");
       return;
     }
+    if (!providerConfig?.enabled) {
+      setActiveSubTab("settings");
+      setProviderNotice("Configure y habilite Alanube antes de emitir comprobantes.");
+      return;
+    }
+    if (ecfType === "E31" && (!ecfCustomerRnc.trim() || !ecfCustomerName.trim())) {
+      alert("La factura E31 requiere RNC y razón social del receptor.");
+      return;
+    }
 
-    // Step 1: Start
     setEmissionStep("validating");
-    setEmissionLogs(["Iniciando proceso de emisión de e-CF para la DGII..."]);
-    
-    // Find sequence to get NCF number
-    const seqIdx = sequences.findIndex(s => s.typeCode === ecfType);
-    if (seqIdx === -1) {
-      alert(`No tiene folios activos para el comprobante ${ecfType}. Por favor solicite nuevos folios.`);
-      setEmissionStep("idle");
-      return;
-    }
-    
-    const activeSeq = sequences[seqIdx];
-    if (activeSeq.currentSeq > activeSeq.endSeq) {
-      alert(`La secuencia para ${ecfType} se ha agotado. Por favor solicite nuevos folios.`);
-      setEmissionStep("idle");
-      return;
-    }
+    setEmissionLogs([
+      `Preparando ${ecfType} para Alanube ${providerConfig.environment}...`,
+      "Validando estructura, totales e idempotencia en el backend."
+    ]);
 
-    const ncfToEmit = formatNcfNum(activeSeq);
-    const timestamp = new Date().toISOString();
+    const itemDetails = ecfProducts.map((item, index) => ({
+      lineNumber: index + 1,
+      billingIndicator: item.taxRate === 0 ? 4 : 1,
+      itemName: item.name.slice(0, 80),
+      goodServiceIndicator: 1,
+      quantityItem: item.qty,
+      unitMeasure: 43,
+      unitPriceItem: Number(item.price.toFixed(2)),
+      itemAmount: Number((item.price * item.qty).toFixed(2))
+    }));
+    const payload = {
+      idDoc: { paymentType: 1 },
+      sender: {
+        rnc: providerConfig.senderRnc,
+        businessName: providerConfig.senderLegalName,
+        tradeName: providerConfig.senderCommercialName,
+        address: providerConfig.senderAddress,
+        issueDate: new Date().toISOString().slice(0, 10)
+      },
+      ...(ecfCustomerRnc.trim() || ecfCustomerName.trim() ? {
+        buyer: {
+          rnc: ecfCustomerRnc.replace(/\D/g, ""),
+          businessName: ecfCustomerName.trim()
+        }
+      } : {}),
+      totals: {
+        totalTaxedAmount: Number(draftSubtotal.toFixed(2)),
+        totalItbis: Number(draftTax.toFixed(2)),
+        totalAmount: Number(draftTotal.toFixed(2))
+      },
+      itemDetails,
+      config: { pdf: { type: "pos" } }
+    };
 
-    // Step 2: Validate customer RNC against local DGII register
-    setTimeout(() => {
-      setEmissionLogs(prev => [
-        ...prev,
-        `✓ [Paso 1/3] RNC del Receptor (${ecfCustomerRnc}) validado con éxito contra el Padrón de Contribuyentes de la DGII.`,
-        `  Receptor: "${ecfCustomerName.toUpperCase()}"`,
-        `  Estado Fiscal: ACTIVO`
+    setEmissionStep("transmitting");
+    setEmissionLogs(previous => [...previous, "Transmitiendo mediante el adaptador REST de Alanube..."]);
+    try {
+      const idempotencyKey = `manual-${activeCompany.id}-${Date.now()}`;
+      const response = await fetch("/api/ecf/documents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          companyId: activeCompany.id,
+          branchId: activeBranch.id,
+          type: ecfType,
+          idempotencyKey,
+          payload
+        })
+      });
+      const body = await response.json();
+      const document = body.document as EcfDocument | undefined;
+      if (!response.ok || !document) {
+        throw new Error(document?.error || body.error || "Alanube rechazó el comprobante");
+      }
+      setEcfDocuments(previous => [document, ...previous.filter(item => item.id !== document.id)]);
+      setEmissionLogs(previous => [
+        ...previous,
+        `Respuesta recibida: ${document.status}.`,
+        `ID proveedor: ${document.providerDocumentId || "en proceso"}`,
+        `Track ID: ${document.trackId || "pendiente"}`
       ]);
-      setEmissionStep("signing");
-
-      // Step 3: Sign XML cryptographically
-      setTimeout(() => {
-        setEmissionLogs(prev => [
-          ...prev,
-          `✓ [Paso 2/3] Estructura e-CF XML generada correctamente para ${ncfToEmit}.`,
-          `  Firmando documento electrónicamente utilizando certificado PKCS#12 (.p12)...`,
-          `  Certificado: "ONCE POS / ${activeCompany.name.toUpperCase()}" emitido por Avansi S.R.L.`,
-          `  Firma XAdES-BES generada de acuerdo a Norma General 06-2018.`
-        ]);
-        setEmissionStep("transmitting");
-
-        // Step 4: Transmit XML to DGII Recepcion API
-        setTimeout(() => {
-          const trackId = `TRK-${new Date().getFullYear()}-${ecfType}-${Math.floor(100000 + Math.random() * 900000)}`;
-          const securitySeal = "SHA256:" + Math.random().toString(16).slice(2, 10).toUpperCase() + Math.random().toString(16).slice(2, 10).toUpperCase();
-          const xmlContent = generateEcfXML(ncfToEmit, timestamp);
-
-          setEmissionLogs(prev => [
-            ...prev,
-            `✓ [Paso 3/3] Conexión establecida con el Web Service de Recepción de la DGII.`,
-            `  URL: https://ecf.dgii.gov.do/test/Recepcion/api/ecf`,
-            `  Transmitiendo payload firmado electrónicamente (e-CF)...`,
-            `  Respuesta del Servidor Recibida:`,
-            `  - Código Estado: 200 OK`,
-            `  - Código DGII: 0 (Aceptado Correctamente)`,
-            `  - TrackID asignado: ${trackId}`,
-            `  - Sello Digital: ${securitySeal}`
-          ]);
-
-          // Increment current NCF sequence in local state
-          const updatedSeqs = [...sequences];
-          updatedSeqs[seqIdx].currentSeq += 1;
-          setSequences(updatedSeqs);
-
-          // Save emitted details
-          const newlyEmitted = {
-            id: "ecf_" + Math.random().toString(36).slice(2, 9),
-            ncf: ncfToEmit,
-            type: ecfType,
-            typeName: ecfType === "E31" ? "Factura de Crédito Fiscal Electrónica" : "Factura de Consumo Electrónica",
-            date: timestamp,
-            customerRnc: ecfCustomerRnc,
-            customerName: ecfCustomerName,
-            subtotal: draftSubtotal,
-            tax: draftTax,
-            total: draftTotal,
-            trackId,
-            securitySeal,
-            xmlContent
-          };
-
-          setEmittedEcfDetails(newlyEmitted);
-          setEmissionStep("completed");
-
-          // Audit Log
-          onAddAudit(
-            "Emisión e-CF exitosa",
-            `e-CF ${ncfToEmit} emitido y aceptado por DGII con TrackID ${trackId} para el cliente ${ecfCustomerName}`
-          );
-
-        }, 1200);
-      }, 1000);
-    }, 900);
+      setEmittedEcfDetails({
+        id: document.id,
+        ncf: document.encf || "Pendiente de asignación",
+        type: document.type,
+        typeName: document.type === "E31" ? "Factura de Crédito Fiscal Electrónica" : "Factura de Consumo Electrónica",
+        date: document.createdAt,
+        customerRnc: ecfCustomerRnc,
+        customerName: ecfCustomerName,
+        subtotal: draftSubtotal,
+        tax: draftTax,
+        total: draftTotal,
+        trackId: document.trackId || document.providerDocumentId || "Procesando",
+        securitySeal: document.securityCode || "Asignado por el proveedor al firmar",
+        qrUrl: document.qrUrl,
+        pdfUrl: document.pdfUrl,
+        xmlUrl: document.xmlUrl,
+        xmlContent: JSON.stringify(document, null, 2),
+        status: document.status
+      });
+      setEmissionStep("completed");
+      onAddAudit("Emisión e-CF", `${ecfType} enviado a Alanube con estado ${document.status}.`);
+    } catch (error: any) {
+      setEmissionStep("idle");
+      setEmissionLogs(previous => [...previous, `ERROR: ${error.message}`]);
+      alert(error.message || "No se pudo emitir el e-CF.");
+      await loadEcfIntegration();
+    }
   };
 
   const handleResetEcfForm = () => {
@@ -526,6 +622,17 @@ export default function FiscalModule({
 
       {/* SUB MENU TABS */}
       <div className="flex overflow-x-auto border-b border-slate-200 mb-6 gap-2" id="fiscal-subtabs-list">
+        <button
+          onClick={() => setActiveSubTab("settings")}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
+            activeSubTab === "settings"
+              ? "border-indigo-600 text-indigo-700 font-extrabold"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          Proveedor e-CF
+        </button>
         <button
           onClick={() => setActiveSubTab("sequences")}
           className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
@@ -586,7 +693,86 @@ export default function FiscalModule({
       {/* VIEW DETAILS */}
       <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden flex flex-col">
         
-        {activeSubTab === "sequences" ? (
+        {activeSubTab === "settings" ? (
+          <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6">
+            <form onSubmit={handleSaveProvider} className="mx-auto max-w-4xl space-y-5">
+              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-sm font-black text-indigo-950">
+                      <ShieldCheck className="h-5 w-5 text-indigo-600" />
+                      Alanube — proveedor autorizado e-CF
+                    </h3>
+                    <p className="mt-1 max-w-2xl text-xs leading-relaxed text-indigo-800">
+                      La aplicación se comunica únicamente con este backend. El JWT se cifra antes de guardarse y nunca se devuelve al navegador.
+                    </p>
+                  </div>
+                  <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase ${
+                    providerConfig?.enabled
+                      ? "border-emerald-300 bg-emerald-100 text-emerald-700"
+                      : "border-slate-300 bg-white text-slate-500"
+                  }`}>
+                    {providerConfig?.enabled ? "Integración activa" : "Sin activar"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Ambiente</label>
+                  <select value={providerEnvironment} onChange={event => setProviderEnvironment(event.target.value as "sandbox" | "production")} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold">
+                    <option value="sandbox">Sandbox — pruebas sin validez fiscal</option>
+                    <option value="production">Producción — documentos con validez fiscal</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">ID de compañía en Alanube</label>
+                  <input value={providerCompanyId} onChange={event => setProviderCompanyId(event.target.value)} placeholder="ID entregado por Alanube" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-mono" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">JWT / Bearer Token</label>
+                  <input type="password" value={providerToken} onChange={event => setProviderToken(event.target.value)} placeholder={providerConfig?.hasToken ? "Token guardado — deje vacío para conservarlo" : "Pegue el JWT del sandbox"} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-mono" autoComplete="new-password" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Secreto del webhook</label>
+                  <input type="password" value={webhookSecret} onChange={event => setWebhookSecret(event.target.value)} placeholder={providerConfig?.hasWebhookSecret ? "Secreto guardado — deje vacío para conservarlo" : "Secreto compartido x-webhook-secret"} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-mono" autoComplete="new-password" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">RNC emisor</label>
+                  <input required value={senderRnc} onChange={event => setSenderRnc(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-mono font-bold" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Razón social</label>
+                  <input required value={senderLegalName} onChange={event => setSenderLegalName(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Nombre comercial</label>
+                  <input value={senderCommercialName} onChange={event => setSenderCommercialName(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Dirección fiscal</label>
+                  <input required value={senderAddress} onChange={event => setSenderAddress(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs" />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 text-xs font-bold text-slate-700">
+                <input type="checkbox" checked={providerEnabled} onChange={event => setProviderEnabled(event.target.checked)} className="h-4 w-4 accent-indigo-600" />
+                Habilitar emisión e-CF para esta empresa
+              </label>
+
+              {providerNotice && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">{providerNotice}</div>}
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={handleTestProvider} disabled={!providerConfig?.hasToken} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  Probar conexión
+                </button>
+                <button type="submit" disabled={isSavingProvider} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-black text-white disabled:opacity-60">
+                  {isSavingProvider ? "Guardando..." : "Guardar configuración segura"}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : activeSubTab === "sequences" ? (
           /* SEQUENCES TABLE */
           <div className="overflow-y-auto flex-1 p-1">
             <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
@@ -978,7 +1164,7 @@ export default function FiscalModule({
                         className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 cursor-pointer tracking-wider"
                       >
                         <Cpu className="w-4 h-4" />
-                        FIRMAR Y EMITIR COMPROBANTE E-CF
+                        ENVIAR E-CF A ALANUBE
                       </button>
                     ) : (
                       <div className="bg-indigo-950/40 border border-indigo-900/30 rounded-xl p-3 text-[11px] font-semibold text-indigo-300 flex items-center gap-2.5">
@@ -992,8 +1178,8 @@ export default function FiscalModule({
                   <div className="flex-1 bg-slate-950 border border-slate-900 text-slate-300 rounded-2xl p-4 font-mono text-[10px] space-y-2 flex flex-col justify-between min-h-[220px] shadow-inner">
                     <div className="space-y-2 overflow-y-auto max-h-[200px]">
                       <div className="text-slate-500 font-bold uppercase text-[9px] border-b border-slate-900 pb-1 mb-1 flex justify-between">
-                        <span>Servicio de Certificación Local</span>
-                        <span>v1.2.0</span>
+                        <span>Adaptador REST Alanube</span>
+                        <span>{providerConfig?.environment || "sin configurar"}</span>
                       </div>
                       
                       {emissionStep === "idle" && (
@@ -1041,9 +1227,9 @@ export default function FiscalModule({
                       <Check className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-slate-900 text-sm uppercase leading-none">Comprobante Fiscal Certificado Correctamente</h3>
+                      <h3 className="font-extrabold text-slate-900 text-sm uppercase leading-none">Comprobante recibido por el proveedor</h3>
                       <p className="text-[11px] text-emerald-700 font-medium mt-1">
-                        El comprobante fue firmado digitalmente con éxito y fue aceptado por la DGII. TrackID: <strong className="font-mono text-xs">{emittedEcfDetails.trackId}</strong>
+                        Estado: <strong>{emittedEcfDetails.status}</strong>. TrackID: <strong className="font-mono text-xs">{emittedEcfDetails.trackId}</strong>
                       </p>
                     </div>
                   </div>
@@ -1165,15 +1351,21 @@ export default function FiscalModule({
 
                   {/* QR & DGII verification */}
                   <div className="pt-4 flex items-center gap-4">
-                    {/* Dynamic QR code for DGII validation */}
+                    {/* QR returned by the certified provider after fiscal signing */}
                     <div className="w-20 h-20 p-1.5 border border-slate-200 rounded-xl bg-white shrink-0 shadow-2xs flex items-center justify-center relative">
-                      <QrCode className="w-full h-full text-slate-900" />
+                      {emittedEcfDetails.qrUrl ? (
+                        <img src={emittedEcfDetails.qrUrl} alt="Código QR de validación DGII" className="h-full w-full object-contain" />
+                      ) : (
+                        <QrCode className="w-full h-full text-slate-300" />
+                      )}
                       <div className="absolute inset-0 bg-indigo-500/5 hover:bg-transparent transition-all rounded-xl"></div>
                     </div>
 
                     <div className="text-[9px] text-slate-500 space-y-1">
                       <p className="font-bold uppercase tracking-wider text-indigo-700 leading-none">DGII - Control de Seguridad e-CF</p>
-                      <p className="font-medium text-slate-600 leading-tight">Escanee el código QR para validar el estado de este comprobante en la plataforma oficial de la DGII.</p>
+                      <p className="font-medium text-slate-600 leading-tight">
+                        {emittedEcfDetails.qrUrl ? "Escanee el QR oficial para validar el e-CF en DGII." : "QR pendiente: actualice el estado antes de imprimir la representación fiscal."}
+                      </p>
                       <div className="font-mono text-[8px] text-slate-400 overflow-hidden text-ellipsis max-w-[240px] truncate">
                         Sello: {emittedEcfDetails.securitySeal}
                       </div>
@@ -1191,8 +1383,19 @@ export default function FiscalModule({
 
                 {/* Print command action triggers */}
                 <div className="flex justify-center gap-3 pt-2">
+                  {emittedEcfDetails.pdfUrl && (
+                    <a
+                      href={emittedEcfDetails.pdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="py-2.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2"
+                    >
+                      <Download className="w-4 h-4" /> PDF POS oficial
+                    </a>
+                  )}
                   <button
                     type="button"
+                    disabled={!emittedEcfDetails.qrUrl}
                     onClick={() => {
                       const printContents = document.getElementById("ecf-representacion-impresa")?.innerHTML;
                       if (printContents) {
@@ -1205,7 +1408,7 @@ export default function FiscalModule({
                         alert("Dispositivo de impresión local no configurado. Iniciando guardado de PDF...");
                       }
                     }}
-                    className="py-2.5 px-5 bg-slate-800 hover:bg-slate-950 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-all"
+                    className="py-2.5 px-5 bg-slate-800 hover:bg-slate-950 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-all disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Printer className="w-4 h-4" />
                     Imprimir Comprobante (Representación Impresa)
@@ -1224,7 +1427,7 @@ export default function FiscalModule({
                     className="py-2.5 px-5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-all"
                   >
                     <Download className="w-4 h-4" />
-                    Descargar XML Firmado
+                    Descargar respuesta técnica
                   </button>
                 </div>
 

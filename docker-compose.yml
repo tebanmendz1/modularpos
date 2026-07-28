@@ -1,6 +1,21 @@
 name: facturapos-cloud
 
 services:
+  facturapos-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: facturapos
+      POSTGRES_USER: facturapos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-local-password}
+    volumes:
+      - facturapos_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U facturapos -d facturapos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   facturapos-app:
     build:
       context: .
@@ -11,4 +26,13 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
+      - DATABASE_URL=postgresql://facturapos:${POSTGRES_PASSWORD:-change-this-local-password}@facturapos-db:5432/facturapos
+      - DATABASE_SSL=false
+      - ECF_MASTER_KEY=${ECF_MASTER_KEY:-change-this-local-ecf-master-key}
+    depends_on:
+      facturapos-db:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  facturapos_postgres_data:

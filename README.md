@@ -2,6 +2,8 @@
 
 Sistema de Punto de Venta (POS) modular, multiempresa y sincronizado con soporte offline, facturación fiscal (NCF / e-CF), control estricto de turnos de caja, inventarios, restaurante, nómina y gestión financiera integral.
 
+> Para producción se requiere PostgreSQL. Consulte la guía de [migración y despliegue en EasyPanel](docs/easypanel-postgresql.md). `db_store.json` se conserva únicamente como respaldo de desarrollo local.
+
 ---
 
 ## 🚀 Características Principales

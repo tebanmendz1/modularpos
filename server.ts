@@ -4,14 +4,29 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import crypto from "crypto";
+import { Pool } from "pg";
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 const DB_FILE = path.join(process.cwd(), "db_store.json");
+const DATABASE_URL = process.env.DATABASE_URL?.trim();
+const DATABASE_SSL = process.env.DATABASE_SSL === "true";
+
+const postgresPool = DATABASE_URL
+  ? new Pool({
+      connectionString: DATABASE_URL,
+      min: 0,
+      max: Number(process.env.DATABASE_POOL_MAX || 10),
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+      ssl: DATABASE_SSL ? { rejectUnauthorized: false } : undefined
+    })
+  : null;
 
 // Client initialization
 let ai: GoogleGenAI | null = null;
@@ -35,6 +50,51 @@ interface DbStore {
   cashSessions: any[];
   accounts?: any[];
   journalEntries?: any[];
+  ecfProviderConfigs?: EcfProviderConfigRecord[];
+  ecfDocuments?: EcfDocumentRecord[];
+}
+
+type EcfEnvironment = "sandbox" | "production";
+type EcfDocumentStatus = "queued" | "processing" | "accepted" | "accepted_conditional" | "rejected" | "error";
+
+interface EcfProviderConfigRecord {
+  companyId: string;
+  provider: "alanube";
+  environment: EcfEnvironment;
+  enabled: boolean;
+  providerCompanyId?: string;
+  senderRnc: string;
+  senderLegalName: string;
+  senderCommercialName?: string;
+  senderAddress: string;
+  tokenEncrypted?: string;
+  webhookSecretEncrypted?: string;
+  updatedAt: string;
+}
+
+interface EcfDocumentRecord {
+  id: string;
+  companyId: string;
+  branchId?: string;
+  saleId?: string;
+  idempotencyKey: string;
+  type: "E31" | "E32" | "E33" | "E34";
+  provider: "alanube";
+  environment: EcfEnvironment;
+  status: EcfDocumentStatus;
+  providerDocumentId?: string;
+  trackId?: string;
+  encf?: string;
+  qrUrl?: string;
+  pdfUrl?: string;
+  xmlUrl?: string;
+  securityCode?: string;
+  requestPayload: any;
+  providerResponse?: any;
+  error?: string;
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const defaultDb: DbStore = {
@@ -256,49 +316,468 @@ const defaultDb: DbStore = {
   ]
 };
 
-// Database state accessor functions
-function readDb(): DbStore {
+// Transitional persistence: PostgreSQL JSONB is the durable source of truth.
+// Keeping the existing DbStore contract avoids a risky all-at-once rewrite; modules
+// can be normalized into relational tables through later schema migrations.
+let cachedDb: DbStore = defaultDb;
+let postgresWriteQueue: Promise<void> = Promise.resolve();
+
+function readLocalDbFallback(): DbStore {
   try {
     if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, "utf-8");
-      return JSON.parse(data);
+      return JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
     }
   } catch (error) {
-    console.error("Error reading database store file, falling back to seed", error);
+    console.error("Could not read legacy db_store.json; using initial seed", error);
   }
-  // Seeding default database
-  writeDb(defaultDb);
   return defaultDb;
 }
 
-function writeDb(db: DbStore) {
+function readDb(): DbStore {
+  return cachedDb;
+}
+
+function writeDb(db: DbStore): Promise<void> {
+  cachedDb = db;
+  if (!postgresPool) {
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
+    } catch (error) {
+      console.error("Error writing local database fallback", error);
+    }
+    return Promise.resolve();
+  }
+
+  const stateSnapshot = JSON.stringify(db);
+  postgresWriteQueue = postgresWriteQueue
+    .catch(error => console.error("Previous PostgreSQL write failed", error))
+    .then(async () => {
+      await postgresPool.query(
+        `INSERT INTO app_state (id, schema_version, state, updated_at)
+         VALUES (1, 1, $1::jsonb, NOW())
+         ON CONFLICT (id) DO UPDATE
+         SET schema_version = EXCLUDED.schema_version,
+             state = EXCLUDED.state,
+             updated_at = NOW()`,
+        [stateSnapshot]
+      );
+    });
+  return postgresWriteQueue;
+}
+
+async function initializeDatabase() {
+  if (!postgresPool) {
+    cachedDb = readLocalDbFallback();
+    await writeDb(cachedDb);
+    console.warn("DATABASE_URL is not configured; using db_store.json fallback (not suitable for production deploys).");
+    return;
+  }
+
+  await postgresPool.query(`
+    CREATE TABLE IF NOT EXISTS app_state (
+      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      state JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  const result = await postgresPool.query<{ state: DbStore }>("SELECT state FROM app_state WHERE id = 1");
+  if (result.rowCount) {
+    cachedDb = result.rows[0].state;
+    console.log("Database state loaded from PostgreSQL.");
+    return;
+  }
+
+  cachedDb = readLocalDbFallback();
+  await writeDb(cachedDb);
+  console.log(fs.existsSync(DB_FILE)
+    ? "Legacy db_store.json imported into PostgreSQL."
+    : "PostgreSQL initialized with the initial application seed.");
+}
+
+async function closeDatabase() {
+  await postgresWriteQueue.catch(error => console.error("Final PostgreSQL flush failed", error));
+  if (postgresPool) await postgresPool.end();
+}
+
+const ECF_ENCRYPTION_SECRET = process.env.ECF_MASTER_KEY || "development-only-change-before-production";
+const ECF_KEY = crypto.scryptSync(ECF_ENCRYPTION_SECRET, "modular-pos-ecf", 32);
+
+function encryptSecret(value: string): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", ECF_KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv, tag, encrypted].map(part => part.toString("base64url")).join(".");
+}
+
+function decryptSecret(value?: string): string {
+  if (!value) return "";
+  const [ivValue, tagValue, encryptedValue] = value.split(".");
+  if (!ivValue || !tagValue || !encryptedValue) throw new Error("Credencial e-CF cifrada inválida");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", ECF_KEY, Buffer.from(ivValue, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedValue, "base64url")),
+    decipher.final()
+  ]).toString("utf8");
+}
+
+function publicEcfConfig(config?: EcfProviderConfigRecord) {
+  if (!config) return null;
+  const { tokenEncrypted, webhookSecretEncrypted, ...safe } = config;
+  return {
+    ...safe,
+    hasToken: Boolean(tokenEncrypted),
+    hasWebhookSecret: Boolean(webhookSecretEncrypted)
+  };
+}
+
+function safeDbForClient(db: DbStore): DbStore {
+  return {
+    ...db,
+    ecfProviderConfigs: (db.ecfProviderConfigs || []).map(config => publicEcfConfig(config) as any)
+  };
+}
+
+const ALANUBE_BASE_URLS: Record<EcfEnvironment, string> = {
+  sandbox: "https://sandbox.alanube.co/dom/v1",
+  production: "https://api.alanube.co/dom/v1"
+};
+
+const ALANUBE_DOCUMENT_PATHS: Record<EcfDocumentRecord["type"], string> = {
+  E31: "fiscal-invoices",
+  E32: "invoices",
+  E33: "debit-notes",
+  E34: "credit-notes"
+};
+
+function normalizeProviderStatus(value: unknown): EcfDocumentStatus {
+  const status = String(value || "").toLowerCase();
+  if (["accepted", "aceptado", "approved", "success", "completed"].includes(status)) return "accepted";
+  if (["accepted_conditional", "accepted-conditional", "aceptado_condicional"].includes(status)) return "accepted_conditional";
+  if (["rejected", "rechazado", "failed", "invalid"].includes(status)) return "rejected";
+  if (["queued", "pending", "pendiente", "processing", "in_process"].includes(status)) return "processing";
+  return "processing";
+}
+
+function updateDocumentFromProvider(document: EcfDocumentRecord, response: any): EcfDocumentRecord {
+  const data = response?.data || response?.document || response || {};
+  return {
+    ...document,
+    status: normalizeProviderStatus(data.status || data.state || data.dgiiStatus),
+    providerDocumentId: data.id || data.documentId || document.providerDocumentId,
+    trackId: data.trackId || data.trackID || document.trackId,
+    encf: data.encf || data.eNCF || data.eNcf || document.encf,
+    qrUrl: data.qrUrl || data.qr || data.stampUrl || document.qrUrl,
+    pdfUrl: data.pdfUrl || data.pdf || data.links?.pdf || document.pdfUrl,
+    xmlUrl: data.xmlUrl || data.xml || data.links?.xml || document.xmlUrl,
+    securityCode: data.securityCode || data.codigoSeguridad || document.securityCode,
+    providerResponse: response,
+    error: undefined,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+async function alanubeRequest(config: EcfProviderConfigRecord, pathName: string, init?: RequestInit) {
+  const token = decryptSecret(config.tokenEncrypted);
+  if (!token) throw new Error("La empresa no tiene un JWT de Alanube configurado");
+  const response = await fetch(`${ALANUBE_BASE_URLS[config.environment]}/${pathName}`, {
+    ...init,
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${token}`,
+      ...(init?.body ? { "content-type": "application/json" } : {}),
+      ...(init?.headers || {})
+    },
+    signal: AbortSignal.timeout(30000)
+  });
+  const text = await response.text();
+  let body: any = {};
+  try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
+  if (!response.ok) {
+    const error = new Error(body?.message || body?.error || `Alanube respondió HTTP ${response.status}`) as Error & { responseBody?: any };
+    error.responseBody = body;
+    throw error;
+  }
+  return body;
+}
+
+async function submitEcfDocument(db: DbStore, document: EcfDocumentRecord, config: EcfProviderConfigRecord) {
+  document.status = "processing";
+  document.attempts += 1;
+  document.updatedAt = new Date().toISOString();
+  await writeDb(db);
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
-  } catch (error) {
-    console.error("Error writing database store", error);
+    const response = await alanubeRequest(config, ALANUBE_DOCUMENT_PATHS[document.type], {
+      method: "POST",
+      body: JSON.stringify(document.requestPayload)
+    });
+    Object.assign(document, updateDocumentFromProvider(document, response));
+  } catch (error: any) {
+    document.status = error?.responseBody ? "rejected" : "error";
+    document.error = error?.message || "No se pudo transmitir el e-CF";
+    document.providerResponse = error?.responseBody;
+    document.updatedAt = new Date().toISOString();
+  }
+  await writeDb(db);
+  return document;
+}
+
+let ecfRetryWorkerRunning = false;
+async function processEcfRetryQueue() {
+  if (ecfRetryWorkerRunning) return;
+  ecfRetryWorkerRunning = true;
+  try {
+    const db = readDb();
+    const retryable = (db.ecfDocuments || []).filter(document =>
+      document.status === "error" &&
+      document.attempts < 5 &&
+      Date.now() - new Date(document.updatedAt).getTime() >= Math.min(15 * 60_000, 30_000 * (2 ** Math.max(0, document.attempts - 1)))
+    );
+    for (const document of retryable) {
+      const config = (db.ecfProviderConfigs || []).find(item => item.companyId === document.companyId && item.enabled);
+      if (config) await submitEcfDocument(db, document, config);
+    }
+  } finally {
+    ecfRetryWorkerRunning = false;
   }
 }
 
-// Ensure database is initialized
-readDb();
-
 // API: Get entire Database status
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    database: postgresPool ? "postgresql" : "local-file",
+    persistence: postgresPool ? "durable" : "ephemeral-on-container-redeploy"
+  });
+});
+
 app.get("/api/db", (req, res) => {
-  res.json(readDb());
+  res.json(safeDbForClient(readDb()));
+});
+
+app.post("/api/admin/import-legacy", async (req, res) => {
+  const migrationToken = process.env.MIGRATION_TOKEN;
+  const authorization = req.header("authorization") || "";
+  if (!migrationToken || authorization !== `Bearer ${migrationToken}`) {
+    return res.status(401).json({ error: "Token de migración inválido" });
+  }
+  if (!postgresPool) return res.status(409).json({ error: "DATABASE_URL no está configurada" });
+  const incoming = req.body as DbStore;
+  if (!incoming || !Array.isArray(incoming.companies) || !Array.isArray(incoming.sales)) {
+    return res.status(400).json({ error: "El archivo no contiene una estructura DbStore válida" });
+  }
+  const existing = readDb();
+  const imported: DbStore = {
+    ...incoming,
+    // Provider secrets are deliberately not present in /api/db exports; configure
+    // the JWT again after migration if the previous installation already used e-CF.
+    ecfProviderConfigs: existing.ecfProviderConfigs || [],
+    ecfDocuments: existing.ecfDocuments?.length ? existing.ecfDocuments : incoming.ecfDocuments || []
+  };
+  await writeDb(imported);
+  res.json({
+    success: true,
+    companies: imported.companies.length,
+    sales: imported.sales.length,
+    customers: imported.customers.length,
+    message: "Estado legado importado en PostgreSQL. Elimine MIGRATION_TOKEN de EasyPanel y vuelva a desplegar."
+  });
 });
 
 // API: Save / Overwrite database (SuperAdmin controls)
-app.post("/api/db/update", (req, res) => {
+app.post("/api/db/update", async (req, res) => {
   const incoming = req.body as DbStore;
   if (!incoming || !Array.isArray(incoming.companies)) {
     return res.status(400).json({ error: "Invalid database structure" });
   }
-  writeDb(incoming);
+  const existing = readDb();
+  await writeDb({
+    ...incoming,
+    ecfProviderConfigs: existing.ecfProviderConfigs || [],
+    ecfDocuments: existing.ecfDocuments || []
+  });
   res.json({ message: "Database saved successfully" });
 });
 
+// ==========================================================
+// e-CF PROVIDER API (ALANUBE ADAPTER)
+// ==========================================================
+
+app.get("/api/ecf/config/:companyId", (req, res) => {
+  const db = readDb();
+  const config = (db.ecfProviderConfigs || []).find(item => item.companyId === req.params.companyId);
+  res.json({ config: publicEcfConfig(config) });
+});
+
+app.put("/api/ecf/config/:companyId", async (req, res) => {
+  const db = readDb();
+  const company = db.companies.find(item => item.id === req.params.companyId);
+  if (!company) return res.status(404).json({ error: "Empresa no encontrada" });
+  if (!company.activeModules?.includes("facturacion_fiscal")) {
+    return res.status(403).json({ error: "La empresa no tiene activo el módulo de facturación fiscal" });
+  }
+
+  const current = (db.ecfProviderConfigs || []).find(item => item.companyId === company.id);
+  const environment: EcfEnvironment = req.body.environment === "production" ? "production" : "sandbox";
+  const senderRnc = String(req.body.senderRnc || company.rnc || "").replace(/\D/g, "");
+  const senderLegalName = String(req.body.senderLegalName || company.name || "").trim();
+  const senderAddress = String(req.body.senderAddress || "").trim();
+  if (!senderRnc || !senderLegalName || !senderAddress) {
+    return res.status(400).json({ error: "RNC, razón social y dirección del emisor son obligatorios" });
+  }
+
+  const next: EcfProviderConfigRecord = {
+    companyId: company.id,
+    provider: "alanube",
+    environment,
+    enabled: Boolean(req.body.enabled),
+    providerCompanyId: String(req.body.providerCompanyId || "").trim() || undefined,
+    senderRnc,
+    senderLegalName,
+    senderCommercialName: String(req.body.senderCommercialName || "").trim() || undefined,
+    senderAddress,
+    tokenEncrypted: req.body.token ? encryptSecret(String(req.body.token).trim()) : current?.tokenEncrypted,
+    webhookSecretEncrypted: req.body.webhookSecret
+      ? encryptSecret(String(req.body.webhookSecret).trim())
+      : current?.webhookSecretEncrypted,
+    updatedAt: new Date().toISOString()
+  };
+  if (next.enabled && !next.tokenEncrypted) {
+    return res.status(400).json({ error: "Debe guardar el JWT de Alanube antes de habilitar la emisión" });
+  }
+  db.ecfProviderConfigs = [
+    ...(db.ecfProviderConfigs || []).filter(item => item.companyId !== company.id),
+    next
+  ];
+  await writeDb(db);
+  res.json({ config: publicEcfConfig(next) });
+});
+
+app.post("/api/ecf/config/:companyId/test", async (req, res) => {
+  const db = readDb();
+  const config = (db.ecfProviderConfigs || []).find(item => item.companyId === req.params.companyId);
+  if (!config) return res.status(404).json({ error: "Configure primero el proveedor e-CF" });
+  if (!config.providerCompanyId) {
+    return res.status(400).json({ error: "Falta el identificador de la compañía asignado por Alanube" });
+  }
+  try {
+    const result = await alanubeRequest(config, `companies/${encodeURIComponent(config.providerCompanyId)}/emitted-documents`);
+    res.json({ success: true, environment: config.environment, result });
+  } catch (error: any) {
+    res.status(502).json({ error: error?.message || "No se pudo conectar con Alanube", details: error?.responseBody });
+  }
+});
+
+app.get("/api/ecf/documents", (req, res) => {
+  const companyId = String(req.query.companyId || "");
+  if (!companyId) return res.status(400).json({ error: "companyId es obligatorio" });
+  const documents = (readDb().ecfDocuments || [])
+    .filter(item => item.companyId === companyId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  res.json({ documents });
+});
+
+app.post("/api/ecf/documents", async (req, res) => {
+  const { companyId, branchId, saleId, type, idempotencyKey, payload } = req.body;
+  if (!companyId || !["E31", "E32", "E33", "E34"].includes(type) || !payload || typeof payload !== "object") {
+    return res.status(400).json({ error: "companyId, type E31/E32/E33/E34 y payload son obligatorios" });
+  }
+  const db = readDb();
+  const config = (db.ecfProviderConfigs || []).find(item => item.companyId === companyId);
+  if (!config?.enabled) return res.status(409).json({ error: "La integración e-CF no está habilitada para esta empresa" });
+  const key = String(idempotencyKey || saleId || crypto.randomUUID());
+  const existing = (db.ecfDocuments || []).find(item => item.companyId === companyId && item.idempotencyKey === key);
+  if (existing) return res.status(200).json({ document: existing, idempotent: true });
+
+  const requestPayload = {
+    ...payload,
+    ...(config.providerCompanyId && !payload.company ? { company: { id: config.providerCompanyId } } : {}),
+    config: {
+      ...(payload.config || {}),
+      pdf: { type: "pos", ...(payload.config?.pdf || {}) }
+    }
+  };
+  const now = new Date().toISOString();
+  const document: EcfDocumentRecord = {
+    id: crypto.randomUUID(),
+    companyId,
+    branchId,
+    saleId,
+    idempotencyKey: key,
+    type,
+    provider: "alanube",
+    environment: config.environment,
+    status: "queued",
+    requestPayload,
+    attempts: 0,
+    createdAt: now,
+    updatedAt: now
+  };
+  db.ecfDocuments = [document, ...(db.ecfDocuments || [])];
+  await writeDb(db);
+  await submitEcfDocument(db, document, config);
+  res.status(document.status === "rejected" || document.status === "error" ? 502 : 201).json({ document });
+});
+
+app.post("/api/ecf/documents/:id/retry", async (req, res) => {
+  const db = readDb();
+  const document = (db.ecfDocuments || []).find(item => item.id === req.params.id);
+  if (!document) return res.status(404).json({ error: "Documento e-CF no encontrado" });
+  if (["accepted", "accepted_conditional"].includes(document.status)) {
+    return res.status(409).json({ error: "Un e-CF aceptado no puede reenviarse" });
+  }
+  const config = (db.ecfProviderConfigs || []).find(item => item.companyId === document.companyId);
+  if (!config?.enabled) return res.status(409).json({ error: "La integración e-CF no está habilitada" });
+  await submitEcfDocument(db, document, config);
+  res.status(document.status === "rejected" || document.status === "error" ? 502 : 200).json({ document });
+});
+
+app.post("/api/ecf/documents/:id/refresh", async (req, res) => {
+  const db = readDb();
+  const document = (db.ecfDocuments || []).find(item => item.id === req.params.id);
+  if (!document) return res.status(404).json({ error: "Documento e-CF no encontrado" });
+  if (!document.providerDocumentId) return res.status(409).json({ error: "El proveedor todavía no asignó un ID al documento" });
+  const config = (db.ecfProviderConfigs || []).find(item => item.companyId === document.companyId);
+  if (!config) return res.status(409).json({ error: "Configuración e-CF no encontrada" });
+  try {
+    const response = await alanubeRequest(
+      config,
+      `${ALANUBE_DOCUMENT_PATHS[document.type]}/${encodeURIComponent(document.providerDocumentId)}?pdfType=pos`
+    );
+    Object.assign(document, updateDocumentFromProvider(document, response));
+    await writeDb(db);
+    res.json({ document });
+  } catch (error: any) {
+    res.status(502).json({ error: error?.message || "No se pudo consultar el documento", details: error?.responseBody });
+  }
+});
+
+app.post("/api/ecf/webhooks/alanube/:companyId", async (req, res) => {
+  const db = readDb();
+  const config = (db.ecfProviderConfigs || []).find(item => item.companyId === req.params.companyId);
+  if (!config) return res.status(404).json({ error: "Empresa e-CF no configurada" });
+  const expectedSecret = decryptSecret(config.webhookSecretEncrypted);
+  const receivedSecret = String(req.header("x-webhook-secret") || req.header("x-api-key") || "");
+  const expectedSecretBuffer = Buffer.from(expectedSecret);
+  const receivedSecretBuffer = Buffer.from(receivedSecret);
+  if (expectedSecret && (!receivedSecret || receivedSecretBuffer.length !== expectedSecretBuffer.length || !crypto.timingSafeEqual(receivedSecretBuffer, expectedSecretBuffer))) {
+    return res.status(401).json({ error: "Firma de webhook inválida" });
+  }
+  const data = req.body?.data || req.body || {};
+  const document = (db.ecfDocuments || []).find(item =>
+    item.companyId === req.params.companyId &&
+    ((data.id && item.providerDocumentId === data.id) || (data.trackId && item.trackId === data.trackId))
+  );
+  if (!document) return res.status(202).json({ received: true, matched: false });
+  Object.assign(document, updateDocumentFromProvider(document, req.body));
+  await writeDb(db);
+  res.json({ received: true, matched: true });
+});
+
 // API: Sync Queue Offline (Conflict resolution and inventory logic)
-app.post("/api/sync", (req, res) => {
+app.post("/api/sync", async (req, res) => {
   const { queue } = req.body; // Array of SyncQueueItem
   if (!queue || !Array.isArray(queue)) {
     return res.status(400).json({ error: "Queue parameter is required" });
@@ -434,7 +913,7 @@ app.post("/api/sync", (req, res) => {
     }
   }
 
-  writeDb(db);
+  await writeDb(db);
   res.json({ results });
 });
 
@@ -566,7 +1045,7 @@ app.get("/api/flutter/customers", (req, res) => {
 });
 
 // 4. Create POS sale with automatic NCF / e-CF sequence assignment
-app.post("/api/flutter/sales", (req, res) => {
+app.post("/api/flutter/sales", async (req, res) => {
   const { 
     companyId, branchId, userId, items, paymentMethod, 
     customerId, ncfType, notes 
@@ -698,7 +1177,7 @@ app.post("/api/flutter/sales", (req, res) => {
     }
   });
 
-  writeDb(db);
+  await writeDb(db);
 
   return res.json({
     success: true,
@@ -780,7 +1259,7 @@ app.get("/api/flutter/expenses", (req, res) => {
   });
 });
 
-app.post("/api/flutter/expenses", (req, res) => {
+app.post("/api/flutter/expenses", async (req, res) => {
   const { companyId, category, amount, concept, registeredBy } = req.body;
   if (!companyId || !amount || !concept) {
     return res.status(400).json({ success: false, error: "Monto y concepto son obligatorios." });
@@ -800,7 +1279,7 @@ app.post("/api/flutter/expenses", (req, res) => {
   };
 
   db.expenses.push(newExpense);
-  writeDb(db);
+  await writeDb(db);
 
   return res.json({
     success: true,
@@ -810,7 +1289,7 @@ app.post("/api/flutter/expenses", (req, res) => {
 });
 
 // 8. Mobile Quick Inventory Stock Adjustment
-app.post("/api/flutter/inventory/adjust", (req, res) => {
+app.post("/api/flutter/inventory/adjust", async (req, res) => {
   const { companyId, productId, newStock, reason } = req.body;
   if (!companyId || !productId || newStock === undefined) {
     return res.status(400).json({ success: false, error: "companyId, productId y newStock son requeridos." });
@@ -828,7 +1307,7 @@ app.post("/api/flutter/inventory/adjust", (req, res) => {
     product.stock = { main: Number(newStock) };
   }
 
-  writeDb(db);
+  await writeDb(db);
 
   return res.json({
     success: true,
@@ -855,7 +1334,7 @@ app.get("/api/flutter/accounting/accounts", (req, res) => {
   });
 });
 
-app.post("/api/flutter/accounting/entries", (req, res) => {
+app.post("/api/flutter/accounting/entries", async (req, res) => {
   const { companyId, concept, lines, createdBy } = req.body;
   if (!companyId || !concept || !lines || !Array.isArray(lines)) {
     return res.status(400).json({ success: false, error: "companyId, concepto y líneas son obligatorios." });
@@ -876,7 +1355,7 @@ app.post("/api/flutter/accounting/entries", (req, res) => {
   };
 
   db.journalEntries.push(newEntry);
-  writeDb(db);
+  await writeDb(db);
 
   return res.json({
     success: true,
@@ -890,6 +1369,8 @@ app.post("/api/catalog/generate", generateProductsHandler);
 
 // Serve frontend assets
 async function startServer() {
+  await initializeDatabase();
+
   // Vite development middleware for real-time asset loading
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -908,7 +1389,20 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`POS modular backend running on http://0.0.0.0:${PORT}`);
+    setInterval(() => void processEcfRetryQueue(), 30_000).unref();
   });
 }
 
-startServer();
+const shutdown = async (signal: string) => {
+  console.log(`${signal} received; flushing PostgreSQL writes...`);
+  await closeDatabase();
+  process.exit(0);
+};
+
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+process.once("SIGINT", () => void shutdown("SIGINT"));
+
+startServer().catch(error => {
+  console.error("Application startup failed", error);
+  process.exit(1);
+});
