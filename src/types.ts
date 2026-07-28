@@ -361,6 +361,7 @@ export const MODULE_TAB_MAPPING: Record<string, string> = {
   android_app: "android_app",
   integraciones: "integraciones",
   cotizaciones: "cotizaciones",
+  ferreteria: "ferreteria",
   reportes: "reportes",
   config: "pos",
   superadmin: "superadmin",
@@ -370,33 +371,34 @@ export const MODULE_TAB_MAPPING: Record<string, string> = {
 // Standard role tab permission definitions
 export const ROLE_ALLOWED_TABS: Record<string, string[]> = {
   SuperAdmin: [
-    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "pos", "ferreteria", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
     "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
     "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
     "cotizaciones", "reportes", "config", "superadmin", "global_audit"
   ],
   Propietario: [
-    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "pos", "ferreteria", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
     "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
     "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
     "cotizaciones", "reportes", "config"
   ],
   Administrador: [
-    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "pos", "ferreteria", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
     "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
     "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
     "cotizaciones", "reportes", "config"
   ],
   Supervisor: [
-    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "pos", "ferreteria", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
     "caja_avanzada", "delivery", "cotizaciones", "reportes"
   ],
   Vendedor: [
-    "pos", "restaurante", "cotizaciones", "clientes", "fidelizacion"
+    "pos", "ferreteria", "restaurante", "cotizaciones", "clientes", "fidelizacion"
   ],
   Cajero: [
     "pos", "caja_avanzada", "clientes"
   ],
+
   "Encargado de inventario": [
     "inventario", "compras", "manufactura", "reportes"
   ],
@@ -476,7 +478,7 @@ export function isTabAllowedForUser(tabId: string, user: User | null, company: C
 export function getAllowedTabsForUser(user: User | null, company: Company | null): string[] {
   if (!user || !company) return ["pos"];
   const allTabs = [
-    "pos", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
+    "pos", "ferreteria", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
     "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
     "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
     "cotizaciones", "reportes", "config"
@@ -512,5 +514,22 @@ export interface Quote {
   convertedSaleId?: string;
 }
 
-
-
+export interface FerreteriaOrder {
+  id: string;
+  companyId: string;
+  branchId: string;
+  sellerId: string;
+  sellerName: string;
+  orderName: string; // Ej: "Juan Perez - Varillas y Cemento"
+  customerId?: string;
+  customerName: string;
+  customerRnc?: string;
+  items: SaleItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  notes?: string;
+  createdAt: string;
+  status: "pendiente_cobro" | "cobrada" | "cancelada";
+  convertedSaleId?: string;
+}

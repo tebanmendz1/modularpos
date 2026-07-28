@@ -5,9 +5,9 @@ import {
   Pause, RotateCcw, Receipt, Scale, AlertTriangle, 
   Lock, Key, Printer, Sparkles, Check, CheckCircle2,
   DollarSign, FileText, Gift, ChevronDown, RefreshCw, Barcode, Truck,
-  Landmark, ShieldCheck, ShieldAlert, AlertCircle, X
+  Landmark, ShieldCheck, ShieldAlert, AlertCircle, X, Hammer
 } from "lucide-react";
-import { Product, Sale, SaleItem, Customer, CashSession, User, Branch } from "../types";
+import { Product, Sale, SaleItem, Customer, CashSession, User, Branch, FerreteriaOrder } from "../types";
 
 const MOCK_RNC_DB: Record<string, { name: string; activity: string; address: string }> = {
   "101010101": { name: "Cervecería Nacional Dominicana, S.A.", activity: "Fabricación de Cervezas, Maltas y Bebidas no Alcohólicas", address: "Av. Autopista 30 de Mayo, Santo Domingo" },
@@ -45,6 +45,8 @@ interface POSModuleProps {
   setActiveTableId: (id: string | null) => void;
   onNavigateToTab: (tab: string) => void;
   onUpdateQuoteStatus?: (quoteId: string, status: "facturada", saleId: string) => void;
+  ferreteriaOrders?: FerreteriaOrder[];
+  onUpdateFerreteriaOrderStatus?: (orderId: string, status: "cobrada", saleId: string) => void;
 }
 
 
@@ -69,7 +71,9 @@ export default function POSModule({
   activeTableId,
   setActiveTableId,
   onNavigateToTab,
-  onUpdateQuoteStatus
+  onUpdateQuoteStatus,
+  ferreteriaOrders = [],
+  onUpdateFerreteriaOrderStatus
 }: POSModuleProps) {
   // POS States
   const [cart, setCart] = useState<SaleItem[]>(() => {
@@ -326,6 +330,12 @@ export default function POSModule({
   const [loadedQuoteId, setLoadedQuoteId] = useState<string | null>(() => {
     return localStorage.getItem("pos_pending_load_quote_id");
   });
+
+  // Ferretería Queue Pickup State
+  const [showFerreteriaQueueModal, setShowFerreteriaQueueModal] = useState(false);
+  const [loadedFerreteriaOrder, setLoadedFerreteriaOrder] = useState<FerreteriaOrder | null>(null);
+  const [ferreteriaQueueSearch, setFerreteriaQueueSearch] = useState("");
+
 
 
   // STRICT ACTIVE MODULE RULES VALIDATION
@@ -1290,9 +1300,9 @@ export default function POSModule({
       status: "completed",
       ncf: assignedNcf,
       ncfType: assignedNcfType,
-      customerId: selectedCustomer?.id,
-      customerName: selectedCustomer?.name,
-      customerRnc: selectedCustomer?.rncOrCedula,
+      customerId: selectedCustomer?.id || loadedFerreteriaOrder?.customerId,
+      customerName: selectedCustomer?.name || loadedFerreteriaOrder?.customerName,
+      customerRnc: selectedCustomer?.rncOrCedula || loadedFerreteriaOrder?.customerRnc,
       notes: notes,
       synced: isOnline
     };
@@ -1305,6 +1315,12 @@ export default function POSModule({
       setLoadedQuoteId(null);
       localStorage.removeItem("pos_pending_load_quote_id");
     }
+
+    if (loadedFerreteriaOrder && onUpdateFerreteriaOrderStatus) {
+      onUpdateFerreteriaOrderStatus(loadedFerreteriaOrder.id, "cobrada", newSale.id);
+      setLoadedFerreteriaOrder(null);
+    }
+
 
     // Sync cash income to active session
     if (activeSession && (paymentMethod === "Efectivo" || paymentMethod === "Dividido")) {
@@ -1459,6 +1475,17 @@ export default function POSModule({
               </div>
               
               <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                {activeCompany.activeModules.includes("ferreteria") && (
+                  <button
+                    type="button"
+                    onClick={() => setShowFerreteriaQueueModal(true)}
+                    className="text-[10px] bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1 rounded-lg font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20 border border-amber-400"
+                  >
+                    <Hammer className="w-3.5 h-3.5" />
+                    <span>📥 Pedidos en Cola (Ferretería) ({ferreteriaOrders.filter(o => o.companyId === activeCompany.id && o.branchId === activeBranch.id && o.status === "pendiente_cobro").length})</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setShowShortcutsLegend(!showShortcutsLegend)}
@@ -1468,6 +1495,7 @@ export default function POSModule({
                   <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${showShortcutsLegend ? "rotate-180" : ""}`} />
                 </button>
               </div>
+
             </div>
 
             {showShortcutsLegend && (
@@ -3301,6 +3329,7 @@ export default function POSModule({
                   setSelectedCustomer(null);
                   setCartDiscount(0);
                   setNotes("");
+                  setLoadedFerreteriaOrder(null);
                   setIsWebOrder(false);
                   setPaymentMethod("Efectivo");
                   setShowConfirmCartReset(false);
@@ -3359,7 +3388,118 @@ export default function POSModule({
           </div>
         </div>
       )}
+
+      {/* FERRETERÍA QUEUE MODAL FOR CASHIER */}
+      {activeCompany.activeModules.includes("ferreteria") && showFerreteriaQueueModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4" id="modal-ferreteria-queue">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-fadeIn text-white">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-2xl">
+                  <Hammer className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Cola de Pre-Facturas Ferretería</h3>
+                  <p className="text-xs text-slate-400">Seleccione la orden despachada por el vendedor para cobrar en caja</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFerreteriaQueueModal(false)}
+                className="p-1 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  type="search"
+                  value={ferreteriaQueueSearch}
+                  onChange={(event) => setFerreteriaQueueSearch(event.target.value)}
+                  placeholder="Buscar por pedido, vendedor o cliente..."
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 pl-9 pr-3 text-xs text-white placeholder:text-slate-500 focus:border-amber-500 focus:outline-hidden"
+                />
+              </div>
+              {ferreteriaOrders.filter(o => {
+                const term = ferreteriaQueueSearch.trim().toLocaleLowerCase();
+                return o.companyId === activeCompany.id &&
+                  o.branchId === activeBranch.id &&
+                  o.status === "pendiente_cobro" &&
+                  (!term || o.orderName.toLocaleLowerCase().includes(term) || o.sellerName.toLocaleLowerCase().includes(term) || o.customerName.toLocaleLowerCase().includes(term));
+              }).length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs font-semibold">
+                  {ferreteriaQueueSearch ? "No hay órdenes que coincidan con la búsqueda." : "No hay órdenes de ferretería pendientes en esta caja."}
+                </div>
+              ) : (
+                ferreteriaOrders.filter(o => {
+                  const term = ferreteriaQueueSearch.trim().toLocaleLowerCase();
+                  return o.companyId === activeCompany.id &&
+                    o.branchId === activeBranch.id &&
+                    o.status === "pendiente_cobro" &&
+                    (!term || o.orderName.toLocaleLowerCase().includes(term) || o.sellerName.toLocaleLowerCase().includes(term) || o.customerName.toLocaleLowerCase().includes(term));
+                }).map(order => (
+                  <div key={order.id} className="p-3 bg-slate-800/80 border border-slate-700/80 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-extrabold text-white text-xs truncate">{order.orderName}</span>
+                        <span className="text-[9px] bg-amber-500/20 text-amber-300 font-extrabold px-1.5 py-0.5 rounded-full border border-amber-500/30">
+                          {order.items.length} productos
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Vendedor: <span className="text-slate-200 font-semibold">{order.sellerName}</span> • Cliente: <span className="text-slate-200 font-semibold">{order.customerName}</span>
+                      </div>
+                      {order.notes && (
+                        <div className="text-[10px] text-amber-400/90 italic mt-0.5 truncate">
+                          Nota: {order.notes}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-right shrink-0 space-y-1">
+                      <div className="font-mono font-black text-sm text-emerald-400">
+                        ${order.total.toFixed(2)}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCart(order.items.map(item => ({ ...item })));
+                          const foundCust = order.customerId ? customers.find(c => c.id === order.customerId) : undefined;
+                          setSelectedCustomer(foundCust || null);
+                          setNotes([`Pedido ferretería: ${order.orderName}`, order.notes].filter(Boolean).join(" | "));
+                          setLoadedFerreteriaOrder(order);
+                          setShowFerreteriaQueueModal(false);
+                          onAddAudit(
+                            "Cargar Orden Ferretería",
+                            `Orden "${order.orderName}" cargada a la caja POS para cobrar.`
+                          );
+                        }}
+                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-md cursor-pointer transition-all active:scale-95"
+                      >
+                        Cargar a Caja
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFerreteriaQueueModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
-
 }

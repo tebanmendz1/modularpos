@@ -5,9 +5,11 @@ import {
   Wallet, Truck, Utensils, ClipboardList, Settings, 
   ChevronRight, ChevronLeft, Bot, LogOut, Key, MapPin, 
   Layers, Database, CalendarClock, DollarSign, Shirt,
-  Landmark, TrendingUp, Globe, Lock, Smartphone, BookOpen
+  Landmark, TrendingUp, Globe, Lock, Smartphone, BookOpen, Hammer
 } from "lucide-react";
 import { Company, User, Branch, isTabAllowedForUser, getAllowedTabsForUser } from "../types";
+
+
 
 
 interface SidebarProps {
@@ -91,7 +93,9 @@ export default function Sidebar({
   // List of all business operator menu items with their module requirements
   const menuItems = [
     { id: "pos", name: "Venta POS", icon: ShoppingCart, module: "pos" },
+    { id: "ferreteria", name: "Despacho Ferretería", icon: Hammer, module: "ferreteria" },
     { id: "inventario", name: "Inventario", icon: Package, module: "inventario" },
+
     { id: "restaurante", name: "Mesa / Salón", icon: Utensils, module: "restaurante" },
     { id: "clientes", name: "Clientes & Crédito", icon: Users, module: "clientes" },
     { id: "fidelizacion", name: "Fidelización", icon: Award, module: "fidelizacion" },

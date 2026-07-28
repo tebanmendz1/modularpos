@@ -33,7 +33,10 @@ import SuperAdminModule from "./components/SuperAdminModule";
 import PublicStorefront from "./components/PublicStorefront";
 import AndroidMobileAppModule from "./components/AndroidMobileAppModule";
 import AccountingModule from "./components/AccountingModule";
-import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser, isDemoCompany, Quote } from "./types";
+import FerreteriaModule from "./components/FerreteriaModule";
+
+import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser, isDemoCompany, Quote, FerreteriaOrder } from "./types";
+
 
 
 
@@ -620,8 +623,50 @@ export default function App() {
     localStorage.setItem("pos_quotes", JSON.stringify(updatedQuotes));
   };
 
+  const [ferreteriaOrders, setFerreteriaOrders] = useState<FerreteriaOrder[]>(() => {
+
+    const saved = localStorage.getItem("pos_ferreteria_orders");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const handleAddFerreteriaOrder = (order: FerreteriaOrder) => {
+    const updated = [order, ...ferreteriaOrders];
+    setFerreteriaOrders(updated);
+    localStorage.setItem("pos_ferreteria_orders", JSON.stringify(updated));
+    if (isOnline) {
+      saveDbStateToServer({ ferreteriaOrders: updated });
+    }
+  };
+
+  const handleUpdateFerreteriaOrdersList = (orders: FerreteriaOrder[]) => {
+    setFerreteriaOrders(orders);
+    localStorage.setItem("pos_ferreteria_orders", JSON.stringify(orders));
+    if (isOnline) {
+      saveDbStateToServer({ ferreteriaOrders: orders });
+    }
+  };
+
+  const handleUpdateFerreteriaOrderStatus = (orderId: string, status: "cobrada" | "cancelada", saleId?: string) => {
+    const updated = ferreteriaOrders.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          status,
+          convertedSaleId: saleId || o.convertedSaleId
+        };
+      }
+      return o;
+    });
+    setFerreteriaOrders(updated);
+    localStorage.setItem("pos_ferreteria_orders", JSON.stringify(updated));
+    if (isOnline) {
+      saveDbStateToServer({ ferreteriaOrders: updated });
+    }
+  };
+
 
   // CUSTOMIZATION/CONFIG SAVE
+
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeCompany) return;
@@ -960,9 +1005,28 @@ export default function App() {
               setActiveTableId={setActiveTableId}
               onNavigateToTab={setActiveTab}
               onUpdateQuoteStatus={handleUpdateQuoteStatus}
+              ferreteriaOrders={ferreteriaOrders}
+              onUpdateFerreteriaOrderStatus={handleUpdateFerreteriaOrderStatus}
             />
-
           )}
+
+          {/* TAB: DESPACHO FERRETERÍA */}
+          {activeTab === "ferreteria" && (
+            <FerreteriaModule
+              activeCompany={activeCompany}
+              currentUser={currentUser}
+              activeBranch={activeBranch}
+              products={products}
+              customers={customers}
+              ferreteriaOrders={ferreteriaOrders}
+              onAddFerreteriaOrder={handleAddFerreteriaOrder}
+              onUpdateFerreteriaOrders={handleUpdateFerreteriaOrdersList}
+              onAddCustomer={handleAddCustomer}
+              onAddAudit={handleAddAudit}
+              onNavigateToPOS={() => setActiveTab("pos")}
+            />
+          )}
+
 
           {/* TAB: STOCK & CATALOG MANAGER */}
           {activeTab === "inventario" && (

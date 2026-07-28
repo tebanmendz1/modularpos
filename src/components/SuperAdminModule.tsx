@@ -26,6 +26,7 @@ interface SuperAdminModuleProps {
 
 const ALL_SYSTEM_MODULES = [
   { key: "pos", label: "Punto de Venta (POS Core)", desc: "Módulo base para ventas rápidas, cobro multimoneda y arqueos de caja" },
+  { key: "ferreteria", label: "Ferretería & Despacho de Mostrador", desc: "Pre-facturas de mostrador, picking y cola especializada de cobro en caja POS" },
   { key: "inventario", label: "Gestión de Inventario", desc: "Monitoreo de existencias por almacén, kardex, transfers y stock" },
   { key: "restaurante", label: "Mesas, Salones & Comandas", desc: "Visualización gráfica de salones y comandas para restaurantes" },
   { key: "clientes", label: "Cuentas por Cobrar & Créditos", desc: "Límites de crédito corporativo, balances y estados de cuenta" },
