@@ -5,7 +5,8 @@ import {
   UserPlus, Receipt, Sparkles, DollarSign, AlertCircle, ShieldAlert,
   Edit2, Eye, ShieldCheck, ShoppingCart, Layers, Search, ChevronDown, ChevronUp, Filter, SlidersHorizontal, Link2, Copy, Settings
 } from "lucide-react";
-import { Company, User, Branch, Warehouse as WarehouseType, Product, Sale, Customer, AuditLog, PlanType, PlatformContract, PlatformBillingSettings } from "../types";
+import { Company, User, Branch, Warehouse as WarehouseType, Product, Sale, Customer, AuditLog, PlanType, PlatformContract, PlatformBillingSettings, PlatformContractVariables } from "../types";
+import { DEFAULT_SERVICE_CONTRACT } from "../contractTemplate";
 
 interface SuperAdminModuleProps {
   companies: Company[];
@@ -58,6 +59,25 @@ const MEMBERSHIP_PLANS_CATALOG = [
   { id: "saas_user", name: "Licencia de Usuario Extra", price: 500, desc: "Habilitación de usuario extra para el panel administrativo." },
   { id: "saas_setup", name: "Servicio de Configuración Inicial", price: 4500, desc: "Migración de base de datos, capacitación y soporte de arranque." },
   { id: "saas_support", name: "Soporte Técnico Premium Mensual", price: 2500, desc: "Línea dedicada y asistencia técnica prioritaria 24/7." }
+];
+
+const CONTRACT_VARIABLE_FIELDS: Array<{ key: keyof PlatformContractVariables; label: string; placeholder?: string }> = [
+  { key: "providerName", label: "Nombre completo del prestador" },
+  { key: "providerDocument", label: "Cédula del prestador" },
+  { key: "clientName", label: "Cliente o negocio" },
+  { key: "clientDocument", label: "Cédula o RNC del cliente" },
+  { key: "monthlyAmount", label: "Mensualidad RD$" },
+  { key: "paymentDay", label: "Día de pago" },
+  { key: "paymentMethod", label: "Método de pago" },
+  { key: "supportChannel", label: "Canal de soporte" },
+  { key: "supportHours", label: "Horario de soporte" },
+  { key: "supportContact", label: "Contacto de soporte" },
+  { key: "city", label: "Ciudad de firma" },
+  { key: "signingDate", label: "Fecha de firma" },
+  { key: "planName", label: "Plan contratado" },
+  { key: "userCount", label: "Cantidad de usuarios" },
+  { key: "branchCount", label: "Cantidad de sucursales" },
+  { key: "activationDate", label: "Fecha de activación" }
 ];
 
 export default function SuperAdminModule({
@@ -149,7 +169,8 @@ export default function SuperAdminModule({
   const [adminNoticeMsg, setAdminNoticeMsg] = useState<string>("");
   const [showAdminNoticeModal, setShowAdminNoticeModal] = useState<boolean>(false);
   const [contracts, setContracts] = useState<PlatformContract[]>([]);
-  const [contractForm, setContractForm] = useState({ companyId: "", title: "Contrato de servicios FacturaPOS", signerEmail: "", expiresAt: "", content: "CONTRATO DE PRESTACIÓN DE SERVICIOS\n\nEntre FacturaPOS Software Platforms y {{EMPRESA}}, se acuerda la prestación del servicio de software conforme a los términos siguientes:\n\n1. OBJETO. Acceso a la plataforma FacturaPOS según el plan contratado.\n2. PAGO. La empresa abonará las facturas dentro del plazo acordado.\n3. DISPONIBILIDAD. El servicio estará sujeto a mantenimiento y políticas de uso razonable.\n4. PROTECCIÓN DE DATOS. Ambas partes protegerán la información bajo su responsabilidad.\n5. ACEPTACIÓN. La firma electrónica al final de este documento manifiesta consentimiento íntegro." });
+  const [contractForm, setContractForm] = useState({ companyId: "", title: "Acuerdo de servicio FacturaPOS Cloud", signerEmail: "", expiresAt: "", content: DEFAULT_SERVICE_CONTRACT });
+  const [contractVariables, setContractVariables] = useState<PlatformContractVariables>({ companyId: "", providerName: "", providerDocument: "", clientName: "", clientDocument: "", monthlyAmount: "", paymentDay: "", paymentMethod: "Transferencia", supportChannel: "WhatsApp", supportHours: "", supportContact: "", city: "Santo Domingo", signingDate: "", planName: "", userCount: "", branchCount: "", activationDate: "", additionalTerms: "" });
   const [billingSettings, setBillingSettings] = useState<PlatformBillingSettings>({ issuerName: "FacturaPOS Software Platforms, SRL", issuerRnc: "", supportEmail: "", noticeTitle: "Factura mensual disponible", noticeMessage: "La factura correspondiente a {{mes}} ya fue generada. Por favor realice su pago para evitar interrupciones en sus operaciones.", paymentChannels: "Transferencia bancaria\nBanco: [Configurar]\nCuenta: [Configurar]\nTitular: [Configurar]" });
 
   const adminHeaders = { "Content-Type": "application/json", "X-User-Id": currentUserId };
@@ -163,10 +184,52 @@ export default function SuperAdminModule({
     }).catch(() => undefined);
   }, [currentUserId]);
 
+  useEffect(() => {
+    if (!contractForm.companyId) return;
+    fetch(`/api/admin/contract-variables/${encodeURIComponent(contractForm.companyId)}`, { headers: { "X-User-Id": currentUserId } })
+      .then(async response => { if (response.ok) setContractVariables(await response.json()); })
+      .catch(() => undefined);
+  }, [contractForm.companyId, currentUserId]);
+
+  const saveContractVariables = async () => {
+    if (!contractForm.companyId) { setAdminNoticeMsg("Seleccione una empresa antes de guardar las variables."); setShowAdminNoticeModal(true); return; }
+    const response = await fetch(`/api/admin/contract-variables/${encodeURIComponent(contractForm.companyId)}`, { method: "PUT", headers: adminHeaders, body: JSON.stringify(contractVariables) });
+    const data = await response.json();
+    if (response.ok) setContractVariables(data);
+    setAdminNoticeMsg(response.ok ? "Variables contractuales guardadas para esta empresa." : data.error || "No se pudieron guardar las variables");
+    setShowAdminNoticeModal(true);
+  };
+
   const handleCreateContract = async (event: React.FormEvent) => {
     event.preventDefault();
     const company = companies.find(item => item.id === contractForm.companyId);
-    const payload = { ...contractForm, content: contractForm.content.replaceAll("{{EMPRESA}}", company?.name || "LA EMPRESA") };
+    const replacements: Record<string, string> = {
+      "[NOMBRE COMPLETO DEL PRESTADOR]": contractVariables.providerName,
+      "[NÚMERO DE CÉDULA]": contractVariables.providerDocument,
+      "[NOMBRE DEL CLIENTE O NEGOCIO]": contractVariables.clientName || company?.name || "LA EMPRESA",
+      "[NÚMERO]": contractVariables.clientDocument,
+      "[MONTO MENSUAL]": contractVariables.monthlyAmount,
+      "[DÍA DE PAGO]": contractVariables.paymentDay,
+      "[TRANSFERENCIA, DEPÓSITO U OTRO MÉTODO]": contractVariables.paymentMethod,
+      "[WHATSAPP, CORREO O TELÉFONO]": contractVariables.supportChannel,
+      "[HORARIO DE SOPORTE]": contractVariables.supportHours,
+      "[NÚMERO O CORREO]": contractVariables.supportContact,
+      "[CIUDAD]": contractVariables.city,
+      "[DÍA/MES/AÑO]": contractVariables.signingDate,
+      "[NOMBRE DEL PLAN]": contractVariables.planName,
+      "[MONTO]": contractVariables.monthlyAmount,
+      "[DÍA DE CADA MES]": contractVariables.paymentDay,
+      "[FECHA]": contractVariables.activationDate
+    };
+    let resolvedContent = contractForm.content
+      .replace("**Cantidad de usuarios:** [CANTIDAD]", `**Cantidad de usuarios:** ${contractVariables.userCount || "[CANTIDAD]"}`)
+      .replace("**Cantidad de sucursales:** [CANTIDAD]", `**Cantidad de sucursales:** ${contractVariables.branchCount || "[CANTIDAD]"}`);
+    for (const [placeholder, value] of Object.entries(replacements)) resolvedContent = resolvedContent.replaceAll(placeholder, value || placeholder);
+    if (contractVariables.additionalTerms) resolvedContent = resolvedContent.replace("**Condiciones adicionales:**", `**Condiciones adicionales:**\n\n${contractVariables.additionalTerms}`);
+    const payload = { ...contractForm, content: resolvedContent };
+    const variablesResponse = await fetch(`/api/admin/contract-variables/${encodeURIComponent(contractForm.companyId)}`, { method: "PUT", headers: adminHeaders, body: JSON.stringify(contractVariables) });
+    if (!variablesResponse.ok) { const variablesError = await variablesResponse.json(); setAdminNoticeMsg(variablesError.error || "No se pudieron guardar las variables"); setShowAdminNoticeModal(true); return; }
+    setContractVariables(await variablesResponse.json());
     const response = await fetch("/api/admin/contracts", { method: "POST", headers: adminHeaders, body: JSON.stringify(payload) });
     const data = await response.json();
     if (!response.ok) { setAdminNoticeMsg(data.error || "No se pudo crear el contrato"); setShowAdminNoticeModal(true); return; }
@@ -984,6 +1047,11 @@ export default function SuperAdminModule({
             <form onSubmit={handleCreateContract} className="bg-slate-950 border border-slate-800 rounded-3xl p-6 space-y-4">
               <div><h3 className="font-black flex items-center gap-2"><FileText className="text-indigo-400"/>Nuevo contrato inmutable</h3><p className="text-xs text-slate-500 mt-1">Al generarlo, el contenido queda congelado. Cualquier cambio requiere crear otro contrato.</p></div>
               <select required value={contractForm.companyId} onChange={e=>setContractForm({...contractForm, companyId:e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm"><option value="">Seleccione empresa</option>{companies.filter(c=>c.id!=="comp_admin").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+              {contractForm.companyId && <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <div className="flex justify-between items-center"><div><p className="text-xs font-black">Variables guardadas de la empresa</p><p className="text-[10px] text-slate-500">Se insertarán automáticamente al generar el contrato.</p></div><button type="button" onClick={saveContractVariables} className="bg-emerald-600 hover:bg-emerald-700 rounded-lg px-3 py-2 text-[10px] font-black">Guardar variables</button></div>
+                <div className="grid sm:grid-cols-2 gap-2">{CONTRACT_VARIABLE_FIELDS.map(field => <label key={field.key} className="space-y-1"><span className="text-[9px] uppercase font-bold text-slate-500">{field.label}</span><input value={String(contractVariables[field.key] || "")} onChange={e=>setContractVariables({...contractVariables,[field.key]:e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs" placeholder={field.placeholder || field.label}/></label>)}</div>
+                <label className="space-y-1 block"><span className="text-[9px] uppercase font-bold text-slate-500">Condiciones adicionales</span><textarea rows={3} value={contractVariables.additionalTerms} onChange={e=>setContractVariables({...contractVariables,additionalTerms:e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs"/></label>
+              </div>}
               <input required value={contractForm.title} onChange={e=>setContractForm({...contractForm,title:e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" placeholder="Título del contrato"/>
               <div className="grid sm:grid-cols-2 gap-3"><input type="email" value={contractForm.signerEmail} onChange={e=>setContractForm({...contractForm,signerEmail:e.target.value})} className="bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" placeholder="Correo del firmante"/><input type="date" value={contractForm.expiresAt} onChange={e=>setContractForm({...contractForm,expiresAt:e.target.value})} className="bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm"/></div>
               <textarea required rows={18} value={contractForm.content} onChange={e=>setContractForm({...contractForm,content:e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm leading-6"/>

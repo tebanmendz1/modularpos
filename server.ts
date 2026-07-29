@@ -10,7 +10,7 @@ import { Pool } from "pg";
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "12mb" }));
 
 const PORT = Number(process.env.PORT || 3000);
 const DB_FILE = path.join(process.cwd(), "db_store.json");
@@ -55,6 +55,7 @@ interface DbStore {
   platformContracts?: PlatformContractRecord[];
   platformBillingSettings?: PlatformBillingSettingsRecord;
   platformBillingNotices?: PlatformBillingNoticeRecord[];
+  platformContractVariables?: PlatformContractVariablesRecord[];
 }
 
 interface PlatformContractRecord {
@@ -63,6 +64,7 @@ interface PlatformContractRecord {
   status: "pending" | "accepted" | "expired"; createdAt: string; expiresAt?: string;
   acceptedAt?: string; signerName?: string; signerDocument?: string;
   signatureData?: string; acceptanceHash?: string; acceptedIpHash?: string; acceptedUserAgent?: string;
+  idDocumentFront?: string; idDocumentBack?: string;
 }
 
 interface PlatformBillingSettingsRecord {
@@ -74,6 +76,14 @@ interface PlatformBillingNoticeRecord {
   id: string; companyId: string; saleId: string; billingPeriod: string; total: number;
   currency: string; title: string; message: string; paymentChannels: string;
   createdAt: string; acknowledgedAt?: string; acknowledgedBy?: string;
+}
+
+interface PlatformContractVariablesRecord {
+  companyId: string; providerName: string; providerDocument: string; clientName: string;
+  clientDocument: string; monthlyAmount: string; paymentDay: string; paymentMethod: string;
+  supportChannel: string; supportHours: string; supportContact: string; city: string;
+  signingDate: string; planName: string; userCount: string; branchCount: string;
+  activationDate: string; additionalTerms: string; updatedAt: string;
 }
 
 type EcfEnvironment = "sandbox" | "production";
@@ -456,7 +466,7 @@ function publicEcfConfig(config?: EcfProviderConfigRecord) {
 }
 
 function safeDbForClient(db: DbStore): DbStore {
-  const { platformContracts, platformBillingSettings, platformBillingNotices, ...clientDb } = db;
+  const { platformContracts, platformBillingSettings, platformBillingNotices, platformContractVariables, ...clientDb } = db;
   return {
     ...clientDb,
     ecfProviderConfigs: (db.ecfProviderConfigs || []).map(config => publicEcfConfig(config) as any)
@@ -623,7 +633,8 @@ app.post("/api/admin/import-legacy", async (req, res) => {
     ecfDocuments: existing.ecfDocuments?.length ? existing.ecfDocuments : incoming.ecfDocuments || [],
     platformContracts: existing.platformContracts || [],
     platformBillingSettings: existing.platformBillingSettings || DEFAULT_BILLING_SETTINGS,
-    platformBillingNotices: existing.platformBillingNotices || []
+    platformBillingNotices: existing.platformBillingNotices || [],
+    platformContractVariables: existing.platformContractVariables || []
   };
   await writeDb(imported);
   res.json({
@@ -648,7 +659,8 @@ app.post("/api/db/update", async (req, res) => {
     ecfDocuments: existing.ecfDocuments || [],
     platformContracts: existing.platformContracts || [],
     platformBillingSettings: existing.platformBillingSettings || DEFAULT_BILLING_SETTINGS,
-    platformBillingNotices: existing.platformBillingNotices || []
+    platformBillingNotices: existing.platformBillingNotices || [],
+    platformContractVariables: existing.platformContractVariables || []
   });
   res.json({ message: "Database saved successfully" });
 });
@@ -656,11 +668,40 @@ app.post("/api/db/update", async (req, res) => {
 // ==========================================================
 // IMMUTABLE CONTRACTS & PLATFORM BILLING NOTICES
 // ==========================================================
+app.get("/api/admin/contract-variables/:companyId", (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const db = readDb();
+  const company = db.companies.find(item => item.id === req.params.companyId);
+  if (!company) return res.status(404).json({ error: "Empresa no encontrada" });
+  const saved = (db.platformContractVariables || []).find(item => item.companyId === company.id);
+  res.json(saved || {
+    companyId: company.id, providerName: "", providerDocument: "", clientName: company.name,
+    clientDocument: company.rnc || "", monthlyAmount: "", paymentDay: "", paymentMethod: "Transferencia",
+    supportChannel: "WhatsApp", supportHours: "", supportContact: "", city: "Santo Domingo",
+    signingDate: new Date().toLocaleDateString("es-DO"), planName: company.plan,
+    userCount: String(company.maxUsers), branchCount: String(company.maxBranches),
+    activationDate: new Date().toLocaleDateString("es-DO"), additionalTerms: ""
+  });
+});
+
+app.put("/api/admin/contract-variables/:companyId", async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const db = readDb();
+  const company = db.companies.find(item => item.id === req.params.companyId);
+  if (!company) return res.status(404).json({ error: "Empresa no encontrada" });
+  const fields = ["providerName", "providerDocument", "clientName", "clientDocument", "monthlyAmount", "paymentDay", "paymentMethod", "supportChannel", "supportHours", "supportContact", "city", "signingDate", "planName", "userCount", "branchCount", "activationDate", "additionalTerms"] as const;
+  const variables = { companyId: company.id, updatedAt: new Date().toISOString() } as PlatformContractVariablesRecord;
+  for (const field of fields) variables[field] = String(req.body?.[field] || "").trim();
+  db.platformContractVariables = [...(db.platformContractVariables || []).filter(item => item.companyId !== company.id), variables];
+  await writeDb(db);
+  res.json(variables);
+});
+
 app.get("/api/admin/contracts", (req, res) => {
   if (!requireSuperAdmin(req, res)) return;
   const contracts = [...(readDb().platformContracts || [])]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map(({ acceptedIpHash, acceptedUserAgent, ...contract }) => contract);
+    .map(({ acceptedIpHash, acceptedUserAgent, signatureData, idDocumentFront, idDocumentBack, ...contract }) => contract);
   res.json(contracts);
 });
 
@@ -706,20 +747,23 @@ app.post("/api/contracts/public/:token/accept", async (req, res) => {
   if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
   if (contract.status !== "pending") return res.status(409).json({ error: "Este contrato ya fue procesado y permanece inmutable" });
   if (contract.expiresAt && new Date(contract.expiresAt).getTime() < Date.now()) return res.status(410).json({ error: "El enlace del contrato expiró" });
-  const { signerName, signerDocument, signatureData, acceptedTerms } = req.body || {};
-  if (!acceptedTerms || !String(signerName || "").trim() || !String(signerDocument || "").trim() || !String(signatureData || "").startsWith("data:image/")) {
-    return res.status(400).json({ error: "Nombre, documento, aceptación y firma son obligatorios" });
+  const { signerName, signerDocument, signatureData, idDocumentFront, idDocumentBack, acceptedTerms } = req.body || {};
+  const validEvidenceImage = (value: unknown) => /^data:image\/(png|jpe?g|webp);base64,/i.test(String(value || ""));
+  if (!acceptedTerms || !String(signerName || "").trim() || !String(signerDocument || "").trim() || !validEvidenceImage(signatureData) || !validEvidenceImage(idDocumentFront) || !validEvidenceImage(idDocumentBack)) {
+    return res.status(400).json({ error: "Nombre, documento, aceptación, firma y fotos de ambos lados de la cédula son obligatorios" });
   }
-  if (String(signatureData).length > 1_500_000) return res.status(413).json({ error: "La firma excede el tamaño permitido" });
+  if (String(signatureData).length > 1_500_000 || String(idDocumentFront).length > 5_500_000 || String(idDocumentBack).length > 5_500_000) return res.status(413).json({ error: "Una de las evidencias excede el tamaño permitido" });
   const acceptedAt = new Date().toISOString();
   contract.status = "accepted";
   contract.acceptedAt = acceptedAt;
   contract.signerName = String(signerName).trim();
   contract.signerDocument = String(signerDocument).trim();
   contract.signatureData = String(signatureData);
+  contract.idDocumentFront = String(idDocumentFront);
+  contract.idDocumentBack = String(idDocumentBack);
   contract.acceptedIpHash = sha256(String(req.ip || req.socket.remoteAddress || "unknown"));
   contract.acceptedUserAgent = String(req.header("user-agent") || "").slice(0, 500);
-  contract.acceptanceHash = sha256(JSON.stringify({ contentHash: contract.contentHash, signerName: contract.signerName, signerDocument: contract.signerDocument, acceptedAt, signatureData }));
+  contract.acceptanceHash = sha256(JSON.stringify({ contentHash: contract.contentHash, signerName: contract.signerName, signerDocument: contract.signerDocument, acceptedAt, signatureData, idDocumentFront, idDocumentBack }));
   await writeDb(db);
   res.json({ success: true, acceptedAt, acceptanceHash: contract.acceptanceHash });
 });

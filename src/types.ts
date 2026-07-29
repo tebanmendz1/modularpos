@@ -127,7 +127,31 @@ export interface PlatformContract {
   signerName?: string;
   signerDocument?: string;
   signatureData?: string;
+  idDocumentFront?: string;
+  idDocumentBack?: string;
   acceptanceHash?: string;
+}
+
+export interface PlatformContractVariables {
+  companyId: string;
+  providerName: string;
+  providerDocument: string;
+  clientName: string;
+  clientDocument: string;
+  monthlyAmount: string;
+  paymentDay: string;
+  paymentMethod: string;
+  supportChannel: string;
+  supportHours: string;
+  supportContact: string;
+  city: string;
+  signingDate: string;
+  planName: string;
+  userCount: string;
+  branchCount: string;
+  activationDate: string;
+  additionalTerms: string;
+  updatedAt?: string;
 }
 
 export interface PlatformBillingSettings {
