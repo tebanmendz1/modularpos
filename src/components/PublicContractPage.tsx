@@ -73,7 +73,8 @@ export default function PublicContractPage({ token }: { token: string }) {
 
   if (error && !contract) return <main className="min-h-screen bg-slate-100 grid place-items-center p-6"><div className="bg-white rounded-2xl p-8 shadow-xl text-rose-700">{error}</div></main>;
   if (!contract) return <main className="min-h-screen grid place-items-center"><Loader2 className="animate-spin text-indigo-600" /></main>;
-  const closed = contract.status !== "pending";
+  const signedContract = contract.status === "accepted";
+  const expiredContract = contract.status === "expired";
 
   return <main className="min-h-screen bg-slate-100 py-8 px-4 text-slate-900">
     <div className="max-w-4xl mx-auto space-y-5">
@@ -92,9 +93,9 @@ export default function PublicContractPage({ token }: { token: string }) {
         })}</div>
         <div className="mt-8 pt-4 border-t text-[11px] text-slate-500 font-mono break-all">Huella SHA-256: {contract.contentHash}</div>
       </article>
-      {closed ? <section className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 flex gap-3">
+      {signedContract ? <section className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 flex gap-3">
         <CheckCircle2 className="text-emerald-600 shrink-0" /><div className="flex-1"><h2 className="font-black text-emerald-900">Contrato aceptado e inmutable</h2><p className="text-sm text-emerald-800">Firmado por {contract.signerName} el {contract.acceptedAt ? new Date(contract.acceptedAt).toLocaleString("es-DO") : "—"}.</p><div className="grid sm:grid-cols-3 gap-3 mt-3">{contract.signatureData && <img src={contract.signatureData} alt="Firma registrada" className="h-28 w-full bg-white border rounded-lg object-contain"/>}{contract.idDocumentFront && <img src={contract.idDocumentFront} alt="Frente de la cédula" className="h-28 w-full bg-white border rounded-lg object-contain"/>}{contract.idDocumentBack && <img src={contract.idDocumentBack} alt="Reverso de la cédula" className="h-28 w-full bg-white border rounded-lg object-contain"/>}</div><p className="text-[10px] font-mono break-all mt-2 text-emerald-700">Evidencia: {contract.acceptanceHash}</p></div>
-      </section> : <section id="contract-signature-section" className="bg-white rounded-2xl shadow-xl p-7 space-y-5 border-4 border-indigo-500 scroll-mt-6">
+      </section> : expiredContract ? <section className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6"><h2 className="font-black text-amber-900">Este contrato está vencido</h2><p className="text-sm text-amber-800 mt-1">La fecha límite era {contract.expiresAt}. Solicite al proveedor un nuevo enlace para poder adjuntar la cédula y firmar.</p></section> : <section id="contract-signature-section" className="bg-white rounded-2xl shadow-xl p-7 space-y-5 border-4 border-indigo-500 scroll-mt-6">
         <div className="flex gap-3 items-center bg-indigo-50 border border-indigo-200 rounded-xl p-4"><FileSignature className="text-indigo-600 w-8 h-8"/><div><p className="text-[10px] font-black tracking-widest text-indigo-500">PASO FINAL</p><h2 className="font-black text-lg text-indigo-950">Firma electrónica del cliente</h2><p className="text-xs text-indigo-700">Complete sus datos, cargue su cédula y dibuje su firma dentro del recuadro.</p></div></div>
         <div className="grid sm:grid-cols-2 gap-4"><input className="border rounded-xl px-4 py-3 text-sm" placeholder="Nombre completo del firmante" value={name} onChange={e=>setName(e.target.value)}/><input className="border rounded-xl px-4 py-3 text-sm" placeholder="Cédula / Pasaporte" value={documentId} onChange={e=>setDocumentId(e.target.value)}/></div>
         <div><p className="text-xs font-bold mb-2">Evidencia de identidad obligatoria</p><div className="grid sm:grid-cols-2 gap-4">

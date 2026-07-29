@@ -496,6 +496,18 @@ function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+function contractExpirationTime(expiresAt?: string): number | null {
+  if (!expiresAt) return null;
+  const value = /^\d{4}-\d{2}-\d{2}$/.test(expiresAt) ? `${expiresAt}T23:59:59.999` : expiresAt;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function publicContractStatus(contract: PlatformContractRecord): PlatformContractRecord["status"] {
+  const expiration = contractExpirationTime(contract.expiresAt);
+  return contract.status === "pending" && expiration !== null && expiration < Date.now() ? "expired" : contract.status;
+}
+
 const ALANUBE_BASE_URLS: Record<EcfEnvironment, string> = {
   sandbox: "https://sandbox.alanube.co/dom/v1",
   production: "https://api.alanube.co/dom/v1"
@@ -701,7 +713,7 @@ app.get("/api/admin/contracts", (req, res) => {
   if (!requireSuperAdmin(req, res)) return;
   const contracts = [...(readDb().platformContracts || [])]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map(({ acceptedIpHash, acceptedUserAgent, signatureData, idDocumentFront, idDocumentBack, ...contract }) => contract);
+    .map(({ acceptedIpHash, acceptedUserAgent, signatureData, idDocumentFront, idDocumentBack, ...contract }) => ({ ...contract, status: publicContractStatus(contract as PlatformContractRecord) }));
   res.json(contracts);
 });
 
@@ -737,8 +749,8 @@ app.post("/api/admin/contracts", async (req, res) => {
 app.get("/api/contracts/public/:token", (req, res) => {
   const contract = (readDb().platformContracts || []).find(item => item.publicToken === req.params.token);
   if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
-  const expired = contract.status === "pending" && contract.expiresAt && new Date(contract.expiresAt).getTime() < Date.now();
-  res.json({ ...contract, status: expired ? "expired" : contract.status, publicToken: undefined, acceptedIpHash: undefined, acceptedUserAgent: undefined });
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.json({ ...contract, status: publicContractStatus(contract), publicToken: undefined, acceptedIpHash: undefined, acceptedUserAgent: undefined });
 });
 
 app.post("/api/contracts/public/:token/accept", async (req, res) => {
@@ -746,7 +758,8 @@ app.post("/api/contracts/public/:token/accept", async (req, res) => {
   const contract = (db.platformContracts || []).find(item => item.publicToken === req.params.token);
   if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
   if (contract.status !== "pending") return res.status(409).json({ error: "Este contrato ya fue procesado y permanece inmutable" });
-  if (contract.expiresAt && new Date(contract.expiresAt).getTime() < Date.now()) return res.status(410).json({ error: "El enlace del contrato expiró" });
+  const expiration = contractExpirationTime(contract.expiresAt);
+  if (expiration !== null && expiration < Date.now()) return res.status(410).json({ error: "El enlace del contrato expiró" });
   const { signerName, signerDocument, signatureData, idDocumentFront, idDocumentBack, acceptedTerms } = req.body || {};
   const validEvidenceImage = (value: unknown) => /^data:image\/(png|jpe?g|webp);base64,/i.test(String(value || ""));
   if (!acceptedTerms || !String(signerName || "").trim() || !String(signerDocument || "").trim() || !validEvidenceImage(signatureData) || !validEvidenceImage(idDocumentFront) || !validEvidenceImage(idDocumentBack)) {
