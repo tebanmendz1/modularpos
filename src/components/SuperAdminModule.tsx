@@ -184,6 +184,20 @@ export default function SuperAdminModule({
     }).catch(() => undefined);
   }, [currentUserId]);
 
+  const refreshContracts = async () => {
+    const response = await fetch("/api/admin/contracts", { headers: { "X-User-Id": currentUserId }, cache: "no-store" });
+    if (response.ok) setContracts(await response.json());
+  };
+
+  useEffect(() => {
+    if (activeTab !== "contratos") return;
+    void refreshContracts();
+    const interval = window.setInterval(() => void refreshContracts(), 10_000);
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") void refreshContracts(); };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", refreshWhenVisible); };
+  }, [activeTab, currentUserId]);
+
   useEffect(() => {
     if (!contractForm.companyId) return;
     fetch(`/api/admin/contract-variables/${encodeURIComponent(contractForm.companyId)}`, { headers: { "X-User-Id": currentUserId } })
@@ -1058,7 +1072,7 @@ export default function SuperAdminModule({
               <button className="w-full bg-indigo-600 hover:bg-indigo-700 rounded-xl py-3 font-black flex items-center justify-center gap-2"><Link2 className="w-4 h-4"/>Generar enlace contractual</button>
             </form>
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6">
-              <h3 className="font-black mb-4">Contratos generados</h3>
+              <div className="flex items-center justify-between mb-4"><div><h3 className="font-black">Contratos generados</h3><p className="text-[10px] text-slate-500">El estado se actualiza automáticamente cada 10 segundos.</p></div><button type="button" onClick={() => void refreshContracts()} className="bg-slate-800 hover:bg-indigo-600 rounded-lg px-3 py-2 text-[10px] font-black">Actualizar estado</button></div>
               <div className="space-y-3 max-h-[720px] overflow-y-auto">
                 {!contracts.length && <p className="text-sm text-slate-500 border border-dashed border-slate-800 rounded-xl p-8 text-center">Aún no se han generado contratos.</p>}
                 {contracts.map(contract => { const url=`${window.location.origin}/contracts/${contract.publicToken}`; return <div key={contract.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
