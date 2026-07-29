@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { 
   Building2, Users, FileText, Plus, Check, X, ChevronRight, 
   Trash2, Coins, Calendar, Hash, MapPin, Warehouse, 
   UserPlus, Receipt, Sparkles, DollarSign, AlertCircle, ShieldAlert,
-  Edit2, Eye, ShieldCheck, ShoppingCart, Layers, Search, ChevronDown, ChevronUp, Filter, SlidersHorizontal
+  Edit2, Eye, ShieldCheck, ShoppingCart, Layers, Search, ChevronDown, ChevronUp, Filter, SlidersHorizontal, Link2, Copy, Settings
 } from "lucide-react";
-import { Company, User, Branch, Warehouse as WarehouseType, Product, Sale, Customer, AuditLog, PlanType } from "../types";
+import { Company, User, Branch, Warehouse as WarehouseType, Product, Sale, Customer, AuditLog, PlanType, PlatformContract, PlatformBillingSettings } from "../types";
 
 interface SuperAdminModuleProps {
   companies: Company[];
@@ -21,6 +21,7 @@ interface SuperAdminModuleProps {
   products: Product[];
   onUpdateProducts: (productsList: Product[]) => void;
   customers: Customer[];
+  currentUserId: string;
   onAddAudit: (action: string, details: string, prev?: string, newVal?: string) => void;
 }
 
@@ -73,9 +74,10 @@ export default function SuperAdminModule({
   products,
   onUpdateProducts,
   customers,
+  currentUserId,
   onAddAudit
 }: SuperAdminModuleProps) {
-  const [activeTab, setActiveTab] = useState<"empresas" | "usuarios" | "facturas">("empresas");
+  const [activeTab, setActiveTab] = useState<"empresas" | "usuarios" | "contratos" | "facturas">("empresas");
 
   // State: Create Company Wizard
   const [showCompanyModal, setShowCompanyModal] = useState(false);
@@ -135,7 +137,8 @@ export default function SuperAdminModule({
     companyId: "",
     paymentMethod: "Transferencia",
     ncfType: "B01", // Crédito Fiscal standard for corporate expense billing
-    notes: "Factura de cobro de membresía mensual de licencia de software POS"
+    notes: "Factura de cobro de membresía mensual de licencia de software POS",
+    billingPeriod: new Date().toLocaleDateString("es-DO", { month: "long", year: "numeric" })
   });
   
   const [invoiceCart, setInvoiceCart] = useState<{ id: string; name: string; qty: number; price: number }[]>([]);
@@ -145,6 +148,39 @@ export default function SuperAdminModule({
   // Custom modal banner notice (replacing native browser alerts)
   const [adminNoticeMsg, setAdminNoticeMsg] = useState<string>("");
   const [showAdminNoticeModal, setShowAdminNoticeModal] = useState<boolean>(false);
+  const [contracts, setContracts] = useState<PlatformContract[]>([]);
+  const [contractForm, setContractForm] = useState({ companyId: "", title: "Contrato de servicios FacturaPOS", signerEmail: "", expiresAt: "", content: "CONTRATO DE PRESTACIÓN DE SERVICIOS\n\nEntre FacturaPOS Software Platforms y {{EMPRESA}}, se acuerda la prestación del servicio de software conforme a los términos siguientes:\n\n1. OBJETO. Acceso a la plataforma FacturaPOS según el plan contratado.\n2. PAGO. La empresa abonará las facturas dentro del plazo acordado.\n3. DISPONIBILIDAD. El servicio estará sujeto a mantenimiento y políticas de uso razonable.\n4. PROTECCIÓN DE DATOS. Ambas partes protegerán la información bajo su responsabilidad.\n5. ACEPTACIÓN. La firma electrónica al final de este documento manifiesta consentimiento íntegro." });
+  const [billingSettings, setBillingSettings] = useState<PlatformBillingSettings>({ issuerName: "FacturaPOS Software Platforms, SRL", issuerRnc: "", supportEmail: "", noticeTitle: "Factura mensual disponible", noticeMessage: "La factura correspondiente a {{mes}} ya fue generada. Por favor realice su pago para evitar interrupciones en sus operaciones.", paymentChannels: "Transferencia bancaria\nBanco: [Configurar]\nCuenta: [Configurar]\nTitular: [Configurar]" });
+
+  const adminHeaders = { "Content-Type": "application/json", "X-User-Id": currentUserId };
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/admin/contracts", { headers: { "X-User-Id": currentUserId } }),
+      fetch("/api/admin/billing-settings", { headers: { "X-User-Id": currentUserId } })
+    ]).then(async ([contractsResponse, settingsResponse]) => {
+      if (contractsResponse.ok) setContracts(await contractsResponse.json());
+      if (settingsResponse.ok) setBillingSettings(await settingsResponse.json());
+    }).catch(() => undefined);
+  }, [currentUserId]);
+
+  const handleCreateContract = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const company = companies.find(item => item.id === contractForm.companyId);
+    const payload = { ...contractForm, content: contractForm.content.replaceAll("{{EMPRESA}}", company?.name || "LA EMPRESA") };
+    const response = await fetch("/api/admin/contracts", { method: "POST", headers: adminHeaders, body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) { setAdminNoticeMsg(data.error || "No se pudo crear el contrato"); setShowAdminNoticeModal(true); return; }
+    setContracts(current => [data, ...current]);
+    setAdminNoticeMsg(`Contrato creado e inmovilizado. Enlace: ${window.location.origin}/contracts/${data.publicToken}`);
+    setShowAdminNoticeModal(true);
+  };
+
+  const saveBillingSettings = async () => {
+    const response = await fetch("/api/admin/billing-settings", { method: "PUT", headers: adminHeaders, body: JSON.stringify(billingSettings) });
+    const data = await response.json();
+    setAdminNoticeMsg(response.ok ? "Configuración de cobros guardada." : data.error || "No se pudo guardar");
+    setShowAdminNoticeModal(true);
+  };
 
   // Helper: Create Company
   const handleCreateCompany = (e: React.FormEvent) => {
@@ -332,7 +368,7 @@ export default function SuperAdminModule({
   };
 
   // Helper: Generate Sale Invoice for SaaS Membership License Fee
-  const handleGenerateInvoice = (e: React.FormEvent) => {
+  const handleGenerateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invoiceForm.companyId) {
       setAdminNoticeMsg("Seleccione la empresa inquilina para facturar.");
@@ -411,12 +447,24 @@ export default function SuperAdminModule({
     onAddSale(newSale);
     setGeneratedInvoice(newSale);
 
+    const noticeResponse = await fetch("/api/admin/billing-notices", {
+      method: "POST",
+      headers: adminHeaders,
+      body: JSON.stringify({ companyId: companySelected.id, saleId: newSale.id, billingPeriod: invoiceForm.billingPeriod, total: newSale.total, currency: companySelected.settings.currency || "DOP" })
+    });
+    if (!noticeResponse.ok) {
+      const noticeError = await noticeResponse.json();
+      setAdminNoticeMsg(`La factura fue creada, pero no se pudo emitir el aviso: ${noticeError.error || "error desconocido"}`);
+      setShowAdminNoticeModal(true);
+      return;
+    }
+
     onAddAudit(
       "Factura Cobro Membresía",
       `Se generó factura de plataforma SaaS ${newSale.id} (${ncfTypeSelected}) para ${companySelected.name} por membresía de licencia. Total: RD$ ${newSale.total}`
     );
 
-    setAdminNoticeMsg(`Factura de membresía generada con éxito para ${companySelected.name}.\nNCF: ${generatedNCF}\nTotal: RD$ ${newSale.total}`);
+    setAdminNoticeMsg(`Factura de membresía generada con éxito para ${companySelected.name}.\nNCF: ${generatedNCF}\nTotal: RD$ ${newSale.total}\nLa empresa ya recibió el aviso de cobro.`);
     setShowAdminNoticeModal(true);
 
     
@@ -504,6 +552,15 @@ export default function SuperAdminModule({
           >
             <Users className="w-3.5 h-3.5 inline mr-1.5" />
             Usuarios Multi-Tenant
+          </button>
+          <button
+            onClick={() => { setActiveTab("contratos"); setGeneratedInvoice(null); }}
+            className={`px-4 py-2 rounded-lg transition-all cursor-pointer ${
+              activeTab === "contratos" ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5 inline mr-1.5" />
+            Contratos
           </button>
           <button
             onClick={() => { setActiveTab("facturas"); setGeneratedInvoice(null); }}
@@ -922,9 +979,46 @@ export default function SuperAdminModule({
           </div>
         )}
 
-        {/* TAB 3: GENERADOR DE FACTURAS GLOBALES */}
+        {activeTab === "contratos" && (
+          <div className="grid lg:grid-cols-2 gap-6 animate-fade-in">
+            <form onSubmit={handleCreateContract} className="bg-slate-950 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div><h3 className="font-black flex items-center gap-2"><FileText className="text-indigo-400"/>Nuevo contrato inmutable</h3><p className="text-xs text-slate-500 mt-1">Al generarlo, el contenido queda congelado. Cualquier cambio requiere crear otro contrato.</p></div>
+              <select required value={contractForm.companyId} onChange={e=>setContractForm({...contractForm, companyId:e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm"><option value="">Seleccione empresa</option>{companies.filter(c=>c.id!=="comp_admin").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+              <input required value={contractForm.title} onChange={e=>setContractForm({...contractForm,title:e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" placeholder="Título del contrato"/>
+              <div className="grid sm:grid-cols-2 gap-3"><input type="email" value={contractForm.signerEmail} onChange={e=>setContractForm({...contractForm,signerEmail:e.target.value})} className="bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" placeholder="Correo del firmante"/><input type="date" value={contractForm.expiresAt} onChange={e=>setContractForm({...contractForm,expiresAt:e.target.value})} className="bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm"/></div>
+              <textarea required rows={18} value={contractForm.content} onChange={e=>setContractForm({...contractForm,content:e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm leading-6"/>
+              <button className="w-full bg-indigo-600 hover:bg-indigo-700 rounded-xl py-3 font-black flex items-center justify-center gap-2"><Link2 className="w-4 h-4"/>Generar enlace contractual</button>
+            </form>
+            <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6">
+              <h3 className="font-black mb-4">Contratos generados</h3>
+              <div className="space-y-3 max-h-[720px] overflow-y-auto">
+                {!contracts.length && <p className="text-sm text-slate-500 border border-dashed border-slate-800 rounded-xl p-8 text-center">Aún no se han generado contratos.</p>}
+                {contracts.map(contract => { const url=`${window.location.origin}/contracts/${contract.publicToken}`; return <div key={contract.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <div className="flex justify-between gap-3"><div><p className="font-bold text-sm">{contract.title}</p><p className="text-xs text-slate-500">{contract.companyName}</p></div><span className={`h-fit text-[10px] font-black px-2 py-1 rounded-full ${contract.status==="accepted"?"bg-emerald-500/20 text-emerald-400":"bg-amber-500/20 text-amber-400"}`}>{contract.status==="accepted"?"FIRMADO":"PENDIENTE"}</span></div>
+                  <p className="text-[10px] font-mono text-slate-600 break-all">SHA-256 {contract.contentHash}</p>
+                  {contract.acceptedAt && <p className="text-xs text-emerald-400">Aceptado por {contract.signerName} · {new Date(contract.acceptedAt).toLocaleString("es-DO")}</p>}
+                  <div className="flex gap-2"><button onClick={()=>navigator.clipboard.writeText(url)} className="flex-1 bg-indigo-600/20 text-indigo-300 rounded-lg py-2 text-xs font-bold flex justify-center gap-1"><Copy className="w-3.5 h-3.5"/>Copiar enlace</button><a href={url} target="_blank" rel="noreferrer" className="flex-1 bg-slate-800 rounded-lg py-2 text-xs font-bold text-center">Ver documento</a></div>
+                </div>; })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: GENERADOR DE FACTURAS GLOBALES */}
         {activeTab === "facturas" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
+            <div className="lg:col-span-12 bg-slate-950 border border-slate-800 rounded-3xl p-5">
+              <div className="flex items-center gap-2 mb-4"><Settings className="w-4 h-4 text-indigo-400"/><div><h3 className="font-black text-sm">Configuración del aviso y canales de pago</h3><p className="text-[10px] text-slate-500">Se incluirá automáticamente en cada factura administrativa generada.</p></div></div>
+              <div className="grid md:grid-cols-3 gap-3">
+                <input value={billingSettings.issuerName} onChange={e=>setBillingSettings({...billingSettings,issuerName:e.target.value})} className="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs" placeholder="Nombre del emisor"/>
+                <input value={billingSettings.issuerRnc} onChange={e=>setBillingSettings({...billingSettings,issuerRnc:e.target.value})} className="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs" placeholder="RNC del emisor"/>
+                <input type="email" value={billingSettings.supportEmail} onChange={e=>setBillingSettings({...billingSettings,supportEmail:e.target.value})} className="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs" placeholder="Correo de soporte"/>
+                <input value={billingSettings.noticeTitle} onChange={e=>setBillingSettings({...billingSettings,noticeTitle:e.target.value})} className="md:col-span-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs" placeholder="Título del aviso"/>
+                <textarea rows={3} value={billingSettings.noticeMessage} onChange={e=>setBillingSettings({...billingSettings,noticeMessage:e.target.value})} className="md:col-span-2 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs" placeholder="Mensaje; use {{mes}} para el período"/>
+                <textarea rows={4} value={billingSettings.paymentChannels} onChange={e=>setBillingSettings({...billingSettings,paymentChannels:e.target.value})} className="md:col-span-3 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs" placeholder="Transferencia, banco, cuenta, titular…"/>
+              </div>
+              <button type="button" onClick={saveBillingSettings} className="mt-3 bg-indigo-600 rounded-lg px-4 py-2 text-xs font-black">Guardar configuración</button>
+            </div>
             
             {/* Invoice Configuration Form */}
             <div className="lg:col-span-7 space-y-6">
@@ -1121,6 +1215,10 @@ export default function SuperAdminModule({
                       </label>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1 sm:col-span-3">
+                          <span className="text-[9px] uppercase font-bold text-slate-500 block">Mes o período facturado</span>
+                          <input value={invoiceForm.billingPeriod} onChange={e=>setInvoiceForm({...invoiceForm,billingPeriod:e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs" placeholder="Ej. julio 2026" required />
+                        </div>
                         <div className="space-y-1">
                           <span className="text-[9px] uppercase font-bold text-slate-500 block">Forma de Pago SaaS</span>
                           <select

@@ -111,6 +111,49 @@ export interface Sale {
   ecfStatus?: EcfDocumentStatus;
 }
 
+export interface PlatformContract {
+  id: string;
+  companyId: string;
+  companyName: string;
+  title: string;
+  content: string;
+  signerEmail?: string;
+  publicToken: string;
+  contentHash: string;
+  status: "pending" | "accepted" | "expired";
+  createdAt: string;
+  expiresAt?: string;
+  acceptedAt?: string;
+  signerName?: string;
+  signerDocument?: string;
+  signatureData?: string;
+  acceptanceHash?: string;
+}
+
+export interface PlatformBillingSettings {
+  issuerName: string;
+  issuerRnc: string;
+  supportEmail: string;
+  noticeTitle: string;
+  noticeMessage: string;
+  paymentChannels: string;
+}
+
+export interface PlatformBillingNotice {
+  id: string;
+  companyId: string;
+  saleId: string;
+  billingPeriod: string;
+  total: number;
+  currency: string;
+  title: string;
+  message: string;
+  paymentChannels: string;
+  createdAt: string;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+}
+
 export type EcfDocumentStatus = "queued" | "processing" | "accepted" | "accepted_conditional" | "rejected" | "error";
 
 export interface EcfProviderConfig {

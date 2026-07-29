@@ -34,6 +34,8 @@ import PublicStorefront from "./components/PublicStorefront";
 import AndroidMobileAppModule from "./components/AndroidMobileAppModule";
 import AccountingModule from "./components/AccountingModule";
 import FerreteriaModule from "./components/FerreteriaModule";
+import PublicContractPage from "./components/PublicContractPage";
+import BillingNoticeBanner from "./components/BillingNoticeBanner";
 
 import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser, isDemoCompany, Quote, FerreteriaOrder } from "./types";
 
@@ -42,6 +44,8 @@ import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession,
 
 
 export default function App() {
+  const publicContractMatch = window.location.pathname.match(/^\/contracts\/([^/]+)$/);
+  if (publicContractMatch) return <PublicContractPage token={decodeURIComponent(publicContractMatch[1])} />;
   // Global States loaded from Server or LocalStorage
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
@@ -938,6 +942,7 @@ export default function App() {
             </div>
           </div>
         </header>
+        <BillingNoticeBanner companyId={activeCompany.id} userId={currentUser.id} />
 
         {/* DEMO MODE NOTICE BANNER */}
         {isDemoCompany(activeCompany.id) && (
@@ -1308,6 +1313,7 @@ export default function App() {
               products={products}
               onUpdateProducts={handleUpdateProductsCatalog}
               customers={customers}
+              currentUserId={currentUser.id}
               onAddAudit={handleAddAudit}
             />
           )}

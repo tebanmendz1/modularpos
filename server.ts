@@ -52,6 +52,28 @@ interface DbStore {
   journalEntries?: any[];
   ecfProviderConfigs?: EcfProviderConfigRecord[];
   ecfDocuments?: EcfDocumentRecord[];
+  platformContracts?: PlatformContractRecord[];
+  platformBillingSettings?: PlatformBillingSettingsRecord;
+  platformBillingNotices?: PlatformBillingNoticeRecord[];
+}
+
+interface PlatformContractRecord {
+  id: string; companyId: string; companyName: string; title: string; content: string;
+  signerEmail?: string; publicToken: string; contentHash: string;
+  status: "pending" | "accepted" | "expired"; createdAt: string; expiresAt?: string;
+  acceptedAt?: string; signerName?: string; signerDocument?: string;
+  signatureData?: string; acceptanceHash?: string; acceptedIpHash?: string; acceptedUserAgent?: string;
+}
+
+interface PlatformBillingSettingsRecord {
+  issuerName: string; issuerRnc: string; supportEmail: string; noticeTitle: string;
+  noticeMessage: string; paymentChannels: string;
+}
+
+interface PlatformBillingNoticeRecord {
+  id: string; companyId: string; saleId: string; billingPeriod: string; total: number;
+  currency: string; title: string; message: string; paymentChannels: string;
+  createdAt: string; acknowledgedAt?: string; acknowledgedBy?: string;
 }
 
 type EcfEnvironment = "sandbox" | "production";
@@ -434,10 +456,34 @@ function publicEcfConfig(config?: EcfProviderConfigRecord) {
 }
 
 function safeDbForClient(db: DbStore): DbStore {
+  const { platformContracts, platformBillingSettings, platformBillingNotices, ...clientDb } = db;
   return {
-    ...db,
+    ...clientDb,
     ecfProviderConfigs: (db.ecfProviderConfigs || []).map(config => publicEcfConfig(config) as any)
   };
+}
+
+const DEFAULT_BILLING_SETTINGS: PlatformBillingSettingsRecord = {
+  issuerName: "FacturaPOS Software Platforms, SRL",
+  issuerRnc: "",
+  supportEmail: "soporte@facturapos.com",
+  noticeTitle: "Factura mensual disponible",
+  noticeMessage: "La factura correspondiente a {{mes}} ya fue generada. Por favor realice su pago para evitar interrupciones en sus operaciones.",
+  paymentChannels: "Transferencia bancaria\nBanco: [Configurar]\nCuenta: [Configurar]\nTitular: [Configurar]"
+};
+
+function requireSuperAdmin(req: express.Request, res: express.Response): boolean {
+  const userId = req.header("x-user-id");
+  const user = readDb().users.find(item => item.id === userId);
+  if (!user || (user.role !== "SuperAdmin" && !user.permissions?.includes("superadmin"))) {
+    res.status(403).json({ error: "Acceso exclusivo para SuperAdmin" });
+    return false;
+  }
+  return true;
+}
+
+function sha256(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
 }
 
 const ALANUBE_BASE_URLS: Record<EcfEnvironment, string> = {
@@ -574,7 +620,10 @@ app.post("/api/admin/import-legacy", async (req, res) => {
     // Provider secrets are deliberately not present in /api/db exports; configure
     // the JWT again after migration if the previous installation already used e-CF.
     ecfProviderConfigs: existing.ecfProviderConfigs || [],
-    ecfDocuments: existing.ecfDocuments?.length ? existing.ecfDocuments : incoming.ecfDocuments || []
+    ecfDocuments: existing.ecfDocuments?.length ? existing.ecfDocuments : incoming.ecfDocuments || [],
+    platformContracts: existing.platformContracts || [],
+    platformBillingSettings: existing.platformBillingSettings || DEFAULT_BILLING_SETTINGS,
+    platformBillingNotices: existing.platformBillingNotices || []
   };
   await writeDb(imported);
   res.json({
@@ -596,9 +645,140 @@ app.post("/api/db/update", async (req, res) => {
   await writeDb({
     ...incoming,
     ecfProviderConfigs: existing.ecfProviderConfigs || [],
-    ecfDocuments: existing.ecfDocuments || []
+    ecfDocuments: existing.ecfDocuments || [],
+    platformContracts: existing.platformContracts || [],
+    platformBillingSettings: existing.platformBillingSettings || DEFAULT_BILLING_SETTINGS,
+    platformBillingNotices: existing.platformBillingNotices || []
   });
   res.json({ message: "Database saved successfully" });
+});
+
+// ==========================================================
+// IMMUTABLE CONTRACTS & PLATFORM BILLING NOTICES
+// ==========================================================
+app.get("/api/admin/contracts", (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const contracts = [...(readDb().platformContracts || [])]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(({ acceptedIpHash, acceptedUserAgent, ...contract }) => contract);
+  res.json(contracts);
+});
+
+app.post("/api/admin/contracts", async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const { companyId, title, content, signerEmail, expiresAt } = req.body || {};
+  const db = readDb();
+  const company = db.companies.find(item => item.id === companyId && item.id !== "comp_admin");
+  if (!company || !String(title || "").trim() || !String(content || "").trim()) {
+    return res.status(400).json({ error: "Empresa, título y contenido son obligatorios" });
+  }
+  if (String(content).length > 100_000) return res.status(413).json({ error: "El contrato excede 100 KB" });
+  const createdAt = new Date().toISOString();
+  const frozenContent = String(content).trim();
+  const contract: PlatformContractRecord = {
+    id: `contract_${crypto.randomUUID()}`,
+    companyId: company.id,
+    companyName: company.name,
+    title: String(title).trim(),
+    content: frozenContent,
+    signerEmail: String(signerEmail || "").trim() || undefined,
+    publicToken: crypto.randomBytes(32).toString("base64url"),
+    contentHash: sha256(JSON.stringify({ companyId, title: String(title).trim(), content: frozenContent, createdAt })),
+    status: "pending",
+    createdAt,
+    expiresAt: expiresAt || undefined
+  };
+  db.platformContracts = [...(db.platformContracts || []), contract];
+  await writeDb(db);
+  res.status(201).json(contract);
+});
+
+app.get("/api/contracts/public/:token", (req, res) => {
+  const contract = (readDb().platformContracts || []).find(item => item.publicToken === req.params.token);
+  if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+  const expired = contract.status === "pending" && contract.expiresAt && new Date(contract.expiresAt).getTime() < Date.now();
+  res.json({ ...contract, status: expired ? "expired" : contract.status, publicToken: undefined, acceptedIpHash: undefined, acceptedUserAgent: undefined });
+});
+
+app.post("/api/contracts/public/:token/accept", async (req, res) => {
+  const db = readDb();
+  const contract = (db.platformContracts || []).find(item => item.publicToken === req.params.token);
+  if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+  if (contract.status !== "pending") return res.status(409).json({ error: "Este contrato ya fue procesado y permanece inmutable" });
+  if (contract.expiresAt && new Date(contract.expiresAt).getTime() < Date.now()) return res.status(410).json({ error: "El enlace del contrato expiró" });
+  const { signerName, signerDocument, signatureData, acceptedTerms } = req.body || {};
+  if (!acceptedTerms || !String(signerName || "").trim() || !String(signerDocument || "").trim() || !String(signatureData || "").startsWith("data:image/")) {
+    return res.status(400).json({ error: "Nombre, documento, aceptación y firma son obligatorios" });
+  }
+  if (String(signatureData).length > 1_500_000) return res.status(413).json({ error: "La firma excede el tamaño permitido" });
+  const acceptedAt = new Date().toISOString();
+  contract.status = "accepted";
+  contract.acceptedAt = acceptedAt;
+  contract.signerName = String(signerName).trim();
+  contract.signerDocument = String(signerDocument).trim();
+  contract.signatureData = String(signatureData);
+  contract.acceptedIpHash = sha256(String(req.ip || req.socket.remoteAddress || "unknown"));
+  contract.acceptedUserAgent = String(req.header("user-agent") || "").slice(0, 500);
+  contract.acceptanceHash = sha256(JSON.stringify({ contentHash: contract.contentHash, signerName: contract.signerName, signerDocument: contract.signerDocument, acceptedAt, signatureData }));
+  await writeDb(db);
+  res.json({ success: true, acceptedAt, acceptanceHash: contract.acceptanceHash });
+});
+
+app.get("/api/admin/billing-settings", (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  res.json(readDb().platformBillingSettings || DEFAULT_BILLING_SETTINGS);
+});
+
+app.put("/api/admin/billing-settings", async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const next = { ...DEFAULT_BILLING_SETTINGS, ...req.body } as PlatformBillingSettingsRecord;
+  if (!next.noticeTitle.trim() || !next.noticeMessage.trim() || !next.paymentChannels.trim()) {
+    return res.status(400).json({ error: "Título, mensaje y canales de pago son obligatorios" });
+  }
+  const db = readDb();
+  db.platformBillingSettings = next;
+  await writeDb(db);
+  res.json(next);
+});
+
+app.post("/api/admin/billing-notices", async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const { companyId, saleId, billingPeriod, total, currency } = req.body || {};
+  const db = readDb();
+  if (!db.companies.some(item => item.id === companyId) || !saleId || !billingPeriod) {
+    return res.status(400).json({ error: "Empresa, factura y período son obligatorios" });
+  }
+  const settings = db.platformBillingSettings || DEFAULT_BILLING_SETTINGS;
+  const notice: PlatformBillingNoticeRecord = {
+    id: `notice_${crypto.randomUUID()}`, companyId, saleId, billingPeriod,
+    total: Number(total || 0), currency: String(currency || "DOP"),
+    title: settings.noticeTitle,
+    message: settings.noticeMessage.replaceAll("{{mes}}", String(billingPeriod)),
+    paymentChannels: settings.paymentChannels,
+    createdAt: new Date().toISOString()
+  };
+  db.platformBillingNotices = [...(db.platformBillingNotices || []), notice];
+  await writeDb(db);
+  res.status(201).json(notice);
+});
+
+app.get("/api/billing/notices/:companyId", (req, res) => {
+  const notices = (readDb().platformBillingNotices || [])
+    .filter(item => item.companyId === req.params.companyId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  res.json(notices);
+});
+
+app.post("/api/billing/notices/:noticeId/acknowledge", async (req, res) => {
+  const db = readDb();
+  const notice = (db.platformBillingNotices || []).find(item => item.id === req.params.noticeId);
+  if (!notice || notice.companyId !== req.body?.companyId) return res.status(404).json({ error: "Aviso no encontrado" });
+  if (!notice.acknowledgedAt) {
+    notice.acknowledgedAt = new Date().toISOString();
+    notice.acknowledgedBy = String(req.body?.userId || "usuario");
+    await writeDb(db);
+  }
+  res.json(notice);
 });
 
 // ==========================================================
