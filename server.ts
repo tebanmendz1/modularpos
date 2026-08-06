@@ -1826,7 +1826,54 @@ app.post("/api/pwa/driver/deliver", async (req, res) => {
   return res.status(404).json({ success: false, error: "Pedido no encontrado" });
 });
 
-// 6. Submit customer rating for driver & food
+// 5b. POS: Assign driver to order & update status
+app.post("/api/pwa/orders/:orderId/assign-driver", async (req, res) => {
+  const { orderId } = req.params;
+  const { driverName, driverPhone, status } = req.body;
+
+  if (!orderId) return res.status(400).json({ success: false, error: "orderId es requerido" });
+
+  const db = readDb();
+  if (!db.deliveryOrders) db.deliveryOrders = [];
+
+  const order = db.deliveryOrders.find((o: any) => o.id === orderId);
+  if (!order) return res.status(404).json({ success: false, error: "Pedido no encontrado" });
+
+  order.driverName = driverName || order.driverName || "Repartidor Asignado";
+  order.driverPhone = driverPhone || order.driverPhone || "";
+  order.status = status || "picked_up";
+  order.assignedAt = new Date().toISOString();
+
+  await writeDb(db);
+  return res.json({ success: true, message: "Repartidor asignado exitosamente", order });
+});
+
+// 5c. POS: Update order status (preparing → dispatched → delivered)
+app.post("/api/pwa/orders/:orderId/status", async (req, res) => {
+  const { orderId } = req.params;
+  const { status } = req.body;
+
+  const validStatuses = ["assigned", "preparing", "ready", "picked_up", "delivered", "canceled"];
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({ success: false, error: `Estado inválido. Opciones: ${validStatuses.join(", ")}` });
+  }
+
+  const db = readDb();
+  if (!db.deliveryOrders) db.deliveryOrders = [];
+
+  const order = db.deliveryOrders.find((o: any) => o.id === orderId);
+  if (!order) return res.status(404).json({ success: false, error: "Pedido no encontrado" });
+
+  order.status = status;
+  order.updatedAt = new Date().toISOString();
+  if (status === "delivered") {
+    order.deliveredAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  await writeDb(db);
+  return res.json({ success: true, message: `Estado actualizado a ${status}`, order });
+});
+
 app.post("/api/pwa/orders/:orderId/rate", async (req, res) => {
   const { orderId } = req.params;
   const { driverRating, foodRating, comment } = req.body;

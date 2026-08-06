@@ -1,6 +1,14 @@
 import React, { useState } from "react";
-import { MapPin, Plus, CheckCircle, Navigation, Clock, User, Phone, Check, RefreshCw, Layers, Settings } from "lucide-react";
+import { MapPin, Plus, CheckCircle, Navigation, Clock, User, Phone, Check, RefreshCw, Layers, Settings, Truck } from "lucide-react";
 import { Company, Branch } from "../types";
+
+const AVAILABLE_DRIVERS = [
+  { name: "Carlos Motoconcho", phone: "809-555-0111" },
+  { name: "Franklin Delivery", phone: "809-555-0222" },
+  { name: "Pedro Expreso", phone: "829-555-0333" },
+  { name: "Miguel RapidSend", phone: "849-555-0444" },
+  { name: "Delivery Propio Local", phone: "" },
+];
 
 interface DeliveryOrder {
   id: string;
@@ -8,8 +16,9 @@ interface DeliveryOrder {
   phone: string;
   address: string;
   courierName: string;
+  courierPhone?: string;
   amount: number;
-  status: "preparing" | "dispatched" | "delivered" | "cancelled";
+  status: "preparing" | "dispatched" | "delivered" | "cancelled" | "assigned" | "picked_up" | "ready";
   notes?: string;
   createdTime: string;
 }
@@ -229,10 +238,11 @@ export default function DeliveryModule({
             customerName: o.customerName || "Cliente PWA",
             phone: o.customerPhone || "809-555-0100",
             address: o.deliveryAddress || "Dirección PWA",
-            courierName: o.courierName || "Repartidor Asignado",
+            courierName: o.driverName || o.courierName || "Sin asignar",
+            courierPhone: o.driverPhone || "",
             amount: Number(o.total || 0),
-            status: o.status === "assigned" || o.status === "pending" ? "preparing" : (o.status as any),
-            notes: (o.items || []).map((i: any) => `${i.quantity || 1}x ${i.name}`).join(", ") || o.paymentMethod || "Pedido PWA Delivery",
+            status: o.status as any,
+            notes: (o.items || []).map((i: any) => `${i.quantity || 1}x ${i.name}`).join(", ") || o.notes || o.paymentMethod || "Pedido PWA Delivery",
             createdTime: o.createdAt || new Date().toISOString()
           }));
 
@@ -248,14 +258,64 @@ export default function DeliveryModule({
     }
   };
 
+  // Assign a driver to an order (persists in POS DB, driver sees it in PWA immediately)
+  const handleAssignDriver = async (orderId: string, driverName: string, driverPhone: string) => {
+    try {
+      const res = await fetch(`/api/pwa/orders/${orderId}/assign-driver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ driverName, driverPhone, status: "picked_up" }),
+      });
+      if (res.ok) {
+        setDeliveries((prev) =>
+          prev.map((d) => d.id === orderId
+            ? { ...d, courierName: driverName, courierPhone: driverPhone, status: "picked_up" as any }
+            : d
+          )
+        );
+        onAddAudit("Asignación Delivery", `Pedido #${orderId} asignado a ${driverName}`);
+      }
+    } catch (err) {
+      console.warn("Error asignando repartidor:", err);
+    }
+    setAssigningOrderId(null);
+  };
+
+  // Update order status (triggers real-time update in PWA client)
+  const handleUpdateStatusApi = async (orderId: string, status: string) => {
+    try {
+      const res = await fetch(`/api/pwa/orders/${orderId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        setDeliveries((prev) =>
+          prev.map((d) => d.id === orderId ? { ...d, status: status as any } : d)
+        );
+        const order = deliveries.find((o) => o.id === orderId);
+        if (order) {
+          onAddAudit("Logística Delivery", `Pedido #${orderId} → ${status.toUpperCase()}`);
+        }
+      }
+    } catch (err) {
+      // Fallback to local state
+      handleUpdateStatus(orderId, status as any);
+    }
+  };
+
+  // Assign driver modal state
+  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState(AVAILABLE_DRIVERS[0].name);
+
   React.useEffect(() => {
     fetchLiveDeliveries();
     const interval = setInterval(fetchLiveDeliveries, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  const activeDeliveries = deliveries.filter((d) => d.status !== "delivered" && d.status !== "cancelled");
-  const historyDeliveries = deliveries.filter((d) => d.status === "delivered" || d.status === "cancelled");
+  const activeDeliveries = deliveries.filter((d) => d.status !== "delivered" && d.status !== "cancelled" && d.status !== "canceled");
+  const historyDeliveries = deliveries.filter((d) => d.status === "delivered" || d.status === "cancelled" || d.status === "canceled");
 
   // Save Delivery Config to POS DB
   const handleSaveDeliveryConfig = async (e: React.FormEvent) => {
@@ -602,21 +662,49 @@ export default function DeliveryModule({
                       )}
                     </td>
                     <td className="p-3 text-right">
-                      <div className="flex justify-end gap-1">
-                        {del.status === "preparing" && (
+                      <div className="flex justify-end gap-1 flex-wrap">
+
+                        {/* Assign driver button (for unassigned or preparing orders) */}
+                        {(del.status === "assigned" || del.status === "preparing") && (
                           <button
-                            onClick={() => handleUpdateStatus(del.id, "dispatched")}
-                            className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                            onClick={() => { setAssigningOrderId(del.id); setSelectedDriver(del.courierName !== "Sin asignar" ? del.courierName : AVAILABLE_DRIVERS[0].name); }}
+                            className="bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
                           >
-                            Despachar
+                            <Truck className="w-3 h-3" /> Asignar Repartidor
                           </button>
                         )}
-                        {del.status === "dispatched" && (
+
+                        {/* Status progression buttons */}
+                        {(del.status === "assigned" || del.status === "preparing") && (
                           <button
-                            onClick={() => handleUpdateStatus(del.id, "delivered")}
+                            onClick={() => handleUpdateStatusApi(del.id, "ready")}
+                            className="bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                          >
+                            ✓ Listo
+                          </button>
+                        )}
+                        {del.status === "ready" && (
+                          <button
+                            onClick={() => handleUpdateStatusApi(del.id, "picked_up")}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                          >
+                            🛵 Despachar
+                          </button>
+                        )}
+                        {(del.status === "dispatched" || del.status === "picked_up") && (
+                          <button
+                            onClick={() => handleUpdateStatusApi(del.id, "delivered")}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
                           >
-                            Marcar Entregado
+                            ✓ Entregado
+                          </button>
+                        )}
+                        {del.status !== "delivered" && del.status !== "cancelled" && (
+                          <button
+                            onClick={() => handleUpdateStatusApi(del.id, "canceled")}
+                            className="bg-red-100 hover:bg-red-200 text-red-700 text-[11px] font-bold px-2 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                          >
+                            ✕
                           </button>
                         )}
                       </div>
@@ -788,6 +876,66 @@ export default function DeliveryModule({
           </div>
         </div>
       )}
+
+      {/* MODAL: ASSIGN DRIVER */}
+      {assigningOrderId && (() => {
+        const order = deliveries.find((d) => d.id === assigningOrderId);
+        const driverInfo = AVAILABLE_DRIVERS.find((d) => d.name === selectedDriver) || AVAILABLE_DRIVERS[0];
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100">
+              <div className="flex items-center gap-2 mb-4">
+                <Truck className="w-5 h-5 text-violet-600" />
+                <h3 className="text-base font-extrabold text-slate-900">Asignar Repartidor</h3>
+              </div>
+
+              {order && (
+                <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-700 space-y-1">
+                  <div><b>Pedido:</b> #{order.id}</div>
+                  <div><b>Cliente:</b> {order.customerName}</div>
+                  <div><b>Dirección:</b> {order.address}</div>
+                  <div><b>Monto:</b> ${order.amount.toFixed(2)}</div>
+                </div>
+              )}
+
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-slate-700 mb-1">Seleccionar Repartidor:</label>
+                <select
+                  value={selectedDriver}
+                  onChange={(e) => setSelectedDriver(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none bg-white"
+                >
+                  {AVAILABLE_DRIVERS.map((d) => (
+                    <option key={d.name} value={d.name}>{d.name}{d.phone ? ` — ${d.phone}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 text-xs text-violet-800 mb-4">
+                <b>📱 Al asignar:</b> El repartidor verá este pedido inmediatamente en su app PWA para comenzar la entrega.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setAssigningOrderId(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAssignDriver(assigningOrderId, selectedDriver, driverInfo.phone)}
+                  className="px-5 py-2 text-xs font-extrabold bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Truck className="w-4 h-4" />
+                  Asignar y Despachar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
