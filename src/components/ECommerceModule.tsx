@@ -47,26 +47,7 @@ export default function ECommerceModule({
   // Incoming web orders state loaded from localStorage
   const [webOrders, setWebOrders] = useState<ECommerceOrder[]>(() => {
     const saved = localStorage.getItem(`pos_web_orders_${activeCompany.id}`);
-    return saved ? JSON.parse(saved) : [
-      { 
-        id: "web_9812", 
-        customerName: "Gisselle Mercedes", 
-        customerPhone: "809-555-8712", 
-        items: [{ productName: "Camiseta Algodón Básica", qty: 2, price: 650 }],
-        total: 1300,
-        date: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-        status: "pending"
-      },
-      { 
-        id: "web_9813", 
-        customerName: "Manuel Castillo", 
-        customerPhone: "829-555-4301", 
-        items: [{ productName: "Jeans Slim Fit Hombre", qty: 1, price: 2100 }],
-        total: 2100,
-        date: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
-        status: "pending"
-      }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Auto reload web orders in real-time

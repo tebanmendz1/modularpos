@@ -1202,6 +1202,7 @@ export default function App() {
               activeCompany={activeCompany}
               currentUser={currentUser}
               activeBranch={activeBranch}
+              branches={branches}
               cashSessions={cashSessions}
               sales={sales}
               onOpenCashSession={handleOpenCashSession}

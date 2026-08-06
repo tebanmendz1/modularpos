@@ -144,17 +144,11 @@ const defaultDb: DbStore = {
   companies: [
     {
       id: "comp_admin",
-      name: "Sistema Central SuperAdmin",
+      name: "Administración del Sistema",
       plan: "Empresarial",
       logo: "ShieldCheck",
-      color: "#6366f1", // Indigo
-      activeModules: [
-        "pos", "inventario", "restaurante", "clientes", "fidelizacion", 
-        "compras", "gastos", "caja_avanzada", "contabilidad", "reportes_financieros", 
-        "manufactura", "ecommerce", "suscripciones", "facturacion_fiscal", 
-        "nomina", "delivery", "android_app", "integraciones", "cotizaciones", 
-        "reportes", "auditoria"
-      ],
+      color: "#6366f1",
+      activeModules: ["all"],
       maxBranches: 99,
       maxUsers: 99,
       maxDevices: 99,
@@ -162,20 +156,35 @@ const defaultDb: DbStore = {
         allowOutOfStock: true,
         requireCustomer: false,
         defaultTaxRate: 0.18,
-        receiptMessage: "Administración Global del Sistema",
+        receiptMessage: "Servidor Central POS",
         currency: "DOP"
       }
     },
     {
       id: "comp_supermercado",
-      name: "Supermercado Don Pablo",
+      name: "El Rincón del Sabor",
+      address: "Av. Winston Churchill, Santo Domingo",
       plan: "Empresarial",
       logo: "ShoppingCart",
-      color: "#0ea5e9", // Sky Blue
+      color: "#0ea5e9",
       activeModules: [
-        "pos", "inventario", "reportes", "clientes", "compras", 
-        "caja_avanzada", "gastos", "cotizaciones", "facturacion_fiscal", 
-        "nomina", "integraciones"
+        "pos",
+        "inventario",
+        "reportes",
+        "clientes",
+        "compras",
+        "caja_avanzada",
+        "reportes_financieros",
+        "manufactura",
+        "ecommerce",
+        "suscripciones",
+        "gastos",
+        "cotizaciones",
+        "facturacion_fiscal",
+        "nomina",
+        "fidelizacion",
+        "restaurante",
+        "delivery"
       ],
       maxBranches: 5,
       maxUsers: 15,
@@ -183,180 +192,39 @@ const defaultDb: DbStore = {
       settings: {
         allowOutOfStock: false,
         requireCustomer: true,
-        defaultTaxRate: 0.18, // 18% ITBIS
-        receiptMessage: "¡Gracias por su compra en Don Pablo! Conserve su comprobante fiscal.",
-        currency: "DOP"
-      }
-    },
-    {
-      id: "comp_bistro",
-      name: "Bistro Gourmet & Bar",
-      plan: "Profesional",
-      logo: "Utensils",
-      color: "#f97316", // Orange
-      activeModules: [
-        "pos", "inventario", "reportes", "caja_avanzada", "gastos", 
-        "restaurante", "delivery"
-      ],
-      maxBranches: 2,
-      maxUsers: 8,
-      maxDevices: 4,
-      settings: {
-        allowOutOfStock: true,
-        requireCustomer: false,
-        defaultTaxRate: 0.18, // ITBIS + 10% Propina Ley will be calculated in UI
-        receiptMessage: "¡Buen provecho! Bistro Gourmet agradece su visita.",
-        currency: "USD"
-      }
-    },
-    {
-      id: "comp_boutique",
-      name: "Boutique Estilo & Moda",
-      plan: "Básico",
-      logo: "Shirt",
-      color: "#ec4899", // Pink
-      activeModules: ["pos", "inventario", "reportes", "fidelizacion"],
-      maxBranches: 1,
-      maxUsers: 3,
-      maxDevices: 2,
-      settings: {
-        allowOutOfStock: false,
-        requireCustomer: false,
         defaultTaxRate: 0.18,
-        receiptMessage: "¡Gracias por vestir con Estilo & Moda!",
-        currency: "EUR"
+        receiptMessage: "¡Gracias por su compra! Conserve su comprobante fiscal.",
+        currency: "DOP"
       }
     }
   ],
   branches: [
     { id: "br_admin_main", companyId: "comp_admin", name: "Sede Central Admin", address: "Servidor Principal / Cloud" },
-    { id: "br_super_main", companyId: "comp_supermercado", name: "Don Pablo Central", address: "Av. Winston Churchill, Santo Domingo" },
-    { id: "br_super_east", companyId: "comp_supermercado", name: "Don Pablo Zona Oriental", address: "Av. San Vicente de Paul, Santo Domingo Este" },
-    { id: "br_bistro_main", companyId: "comp_bistro", name: "Bistro Piantini", address: "Calle Gustavo Mejía Ricart, Santo Domingo" },
-    { id: "br_boutique_main", companyId: "comp_boutique", name: "Boutique Naco", address: "Av. Tiradentes, Plaza Naco" }
+    { id: "br_super_main", companyId: "comp_supermercado", name: "Sucursal Principal", address: "Av. Winston Churchill, Santo Domingo" }
   ],
   warehouses: [
     { id: "wh_admin_main", branchId: "br_admin_main", name: "Almacén Central System" },
     { id: "wh_super_main_1", branchId: "br_super_main", name: "Almacén Principal" },
-    { id: "wh_super_main_exhibit", branchId: "br_super_main", name: "Góndolas Tienda" },
-    { id: "wh_super_east_1", branchId: "br_super_east", name: "Almacén SDE" },
-    { id: "wh_bistro_kitchen", branchId: "br_bistro_main", name: "Cocina y Barra" },
-    { id: "wh_boutique_store", branchId: "br_boutique_main", name: "Exhibición y Almacén" }
+    { id: "wh_super_main_exhibit", branchId: "br_super_main", name: "Góndolas Tienda" }
   ],
   users: [
-    // SuperAdmin / Developer Account
     { id: "usr_dev_superadmin", companyId: "comp_admin", name: "Desarrollador (Super Admin)", email: "admin@modularpos.com", role: "SuperAdmin", pin: "000000", permissions: ["all", "superadmin"] },
-    // Supermercado users
-    { id: "usr_super_owner", companyId: "comp_supermercado", name: "Juan Pablo", email: "juan@donpablo.com", role: "Propietario", pin: "111111", permissions: ["all"] },
-    { id: "usr_super_cajero", companyId: "comp_supermercado", name: "María González", email: "maria@donpablo.com", role: "Cajero", pin: "222222", permissions: ["pos_vender", "pos_clientes", "pos_abrir_caja", "pos_cerrar_caja"] },
-    { id: "usr_super_inv", companyId: "comp_supermercado", name: "Carlos Almacén", email: "carlos@donpablo.com", role: "Encargado de inventario", pin: "333333", permissions: ["inv_ver", "inv_ajustes", "inv_transferencias"] },
-    // Bistro users
-    { id: "usr_bistro_admin", companyId: "comp_bistro", name: "Chef Roberto", email: "roberto@bistrogourmet.com", role: "Administrador", pin: "444444", permissions: ["all"] },
-    { id: "usr_bistro_mesero", companyId: "comp_bistro", name: "Alejandro Waiter", email: "alex@bistrogourmet.com", role: "Vendedor", pin: "555555", permissions: ["pos_vender", "restaurante_mesas"] },
-    // Boutique users
-    { id: "usr_boutique_owner", companyId: "comp_boutique", name: "Laura Moda", email: "laura@estiloymoda.com", role: "Propietario", pin: "777777", permissions: ["all"] }
+    { id: "usr_super_owner", companyId: "comp_supermercado", name: "Propietario", email: "propietario@rincondelsabor.com", role: "Propietario", pin: "111111", permissions: ["all"] },
+    { id: "usr_super_cajero", companyId: "comp_supermercado", name: "Cajero Principal", email: "caja@rincondelsabor.com", role: "Cajero", pin: "222222", permissions: ["pos_vender", "pos_clientes", "pos_abrir_caja", "pos_cerrar_caja"] }
   ],
-  products: [
-    // Supermercado Products
-    { id: "prod_super_arroz", companyId: "comp_supermercado", name: "Arroz Premium 10lb", sku: "ARR-001", barcode: "7460123450012", category: "Granos & Abarrotes", price: 380, cost: 290, unit: "Fardo", stock: { "wh_super_main_1": 150, "wh_super_main_exhibit": 45, "wh_super_east_1": 80 }, minStock: 30, maxStock: 500, isWeighable: false, isSerialized: false },
-    { id: "prod_super_aceite", companyId: "comp_supermercado", name: "Aceite de Soya 1.5L", sku: "ACE-002", barcode: "7460123450029", category: "Aceites & Condimentos", price: 295, cost: 220, unit: "Unidades", stock: { "wh_super_main_1": 90, "wh_super_main_exhibit": 28, "wh_super_east_1": 60 }, minStock: 20, maxStock: 200, isWeighable: false, isSerialized: false },
-    { id: "prod_super_leche", companyId: "comp_supermercado", name: "Leche Semidescremada 1L", sku: "LEC-003", barcode: "7460123450036", category: "Lácteos & Huevos", price: 85, cost: 65, unit: "Unidades", stock: { "wh_super_main_1": 320, "wh_super_main_exhibit": 72, "wh_super_east_1": 150 }, minStock: 50, maxStock: 600, isWeighable: false, isSerialized: false },
-    { id: "prod_super_queso", companyId: "comp_supermercado", name: "Queso Cheddar Importado (por Libra)", sku: "QUE-004", barcode: "7460123450043", category: "Fiambrería", price: 420, cost: 310, unit: "Lb", stock: { "wh_super_main_1": 45, "wh_super_main_exhibit": 15.5, "wh_super_east_1": 25 }, minStock: 10, maxStock: 100, isWeighable: true, isSerialized: false },
-    { id: "prod_super_refresco", companyId: "comp_supermercado", name: "Refresco Cola 2L", sku: "REF-005", barcode: "7460123450050", category: "Bebidas", price: 90, cost: 65, unit: "Unidades", stock: { "wh_super_main_1": 400, "wh_super_main_exhibit": 120, "wh_super_east_1": 210 }, minStock: 40, maxStock: 800, isWeighable: false, isSerialized: false },
-    // Bistro Products (Ingredients & Finished Plates)
-    { id: "prod_bistro_pasta", companyId: "comp_bistro", name: "Fettuccine Alfredo con Pollo", sku: "PAS-001", barcode: "BIST-001", category: "Pastas", price: 650, cost: 180, unit: "Plato", stock: { "wh_bistro_kitchen": 9999 }, minStock: 5, maxStock: 9999, isWeighable: false, isSerialized: false },
-    { id: "prod_bistro_burger", companyId: "comp_bistro", name: "Hamburguesa Trufa Premium", sku: "BUR-002", barcode: "BIST-002", category: "Hamburguesas", price: 580, cost: 165, unit: "Plato", stock: { "wh_bistro_kitchen": 9999 }, minStock: 5, maxStock: 9999, isWeighable: false, isSerialized: false },
-    { id: "prod_bistro_vino", companyId: "comp_bistro", name: "Copa Vino Tinto Cabernet", sku: "VIN-003", barcode: "BIST-003", category: "Bebidas", price: 350, cost: 110, unit: "Copa", stock: { "wh_bistro_kitchen": 85 }, minStock: 10, maxStock: 120, isWeighable: false, isSerialized: false },
-    { id: "prod_bistro_ribeye", companyId: "comp_bistro", name: "Ribeye Steak Angus 12oz", sku: "RIB-004", barcode: "BIST-004", category: "Carnes", price: 1450, cost: 490, unit: "Plato", stock: { "wh_bistro_kitchen": 42 }, minStock: 8, maxStock: 80, isWeighable: false, isSerialized: false },
-    // Bistro Raw Material
-    { id: "prod_bistro_raw_meat", companyId: "comp_bistro", name: "Carne Ribeye Angus (Materia Prima)", sku: "RAW-RIB", barcode: "RAW-001", category: "Insumos", price: 0, cost: 350, unit: "Kg", stock: { "wh_bistro_kitchen": 24.5 }, minStock: 5, maxStock: 50, isWeighable: true, isSerialized: false },
-    // Boutique Products
-    { id: "prod_boutique_vestido", companyId: "comp_boutique", name: "Vestido Floral de Verano", sku: "VES-001", barcode: "BOUT-001", category: "Vestidos", price: 1850, cost: 950, unit: "Unidades", stock: { "wh_boutique_store": 18 }, minStock: 3, maxStock: 40, isWeighable: false, isSerialized: false, variants: [{ name: "Talla", options: ["S", "M", "L"] }, { name: "Color", options: ["Blanco", "Azul"] }] },
-    { id: "prod_boutique_jeans", companyId: "comp_boutique", name: "Jeans Slim Fit Hombre", sku: "JEA-002", barcode: "BOUT-002", category: "Pantalones", price: 2100, cost: 1100, unit: "Unidades", stock: { "wh_boutique_store": 25 }, minStock: 5, maxStock: 50, isWeighable: false, isSerialized: false, variants: [{ name: "Talla", options: ["30", "32", "34"] }] },
-    { id: "prod_boutique_tshirt", companyId: "comp_boutique", name: "Camiseta Algodón Básica", sku: "TSH-003", barcode: "BOUT-003", category: "Camisetas", price: 650, cost: 280, unit: "Unidades", stock: { "wh_boutique_store": 55 }, minStock: 10, maxStock: 100, isWeighable: false, isSerialized: false, variants: [{ name: "Color", options: ["Negro", "Blanco", "Gris"] }] }
-  ],
-  sales: [
-    // Historical Dominican Republic NCF sales
-    {
-      id: "sale_super_1",
-      uuid: "sale_super_1",
-      companyId: "comp_supermercado",
-      branchId: "br_super_main",
-      userId: "usr_super_cajero",
-      date: "2026-07-19T10:30:00-07:00",
-      items: [
-        { productId: "prod_super_arroz", productName: "Arroz Premium 10lb", price: 380, cost: 290, qty: 2, discount: 0, tax: 0.18 },
-        { productId: "prod_super_leche", productName: "Leche Semidescremada 1L", price: 85, cost: 65, qty: 4, discount: 5, tax: 0.18 }
-      ],
-      total: 1063.4,
-      discount: 17.0,
-      tax: 162.11,
-      paymentMethod: "Efectivo",
-      paymentDetails: { cashPaid: 1200, change: 136.6 },
-      status: "completed",
-      ncf: "B0100000045",
-      ncfType: "NCF Crédito Fiscal (B01)",
-      customerId: "cust_super_cl1",
-      notes: "Compra estándar de cliente regular",
-      synced: true
-    },
-    {
-      id: "sale_bistro_1",
-      uuid: "sale_bistro_1",
-      companyId: "comp_bistro",
-      branchId: "br_bistro_main",
-      userId: "usr_bistro_mesero",
-      date: "2026-07-19T13:45:00-07:00",
-      items: [
-        { productId: "prod_bistro_burger", productName: "Hamburguesa Trufa Premium", price: 580, cost: 165, qty: 2, discount: 0, tax: 0.18 },
-        { productId: "prod_bistro_vino", productName: "Copa Vino Tinto Cabernet", price: 350, cost: 110, qty: 2, discount: 0, tax: 0.18 }
-      ],
-      total: 2221.6, // 1860 + 10% propina ley + 18% itbis
-      discount: 0,
-      tax: 334.8,
-      paymentMethod: "Tarjeta",
-      paymentDetails: { cardLast4: "4321" },
-      status: "completed",
-      synced: true
-    }
-  ],
-  customers: [
-    { id: "cust_super_cl1", companyId: "comp_supermercado", name: "Constructora Dominicana SRL", phone: "809-555-0192", email: "info@condom.com.do", rncOrCedula: "131123456", points: 150, tier: "Plata", creditLimit: 100000, currentDebt: 25000, synced: true },
-    { id: "cust_super_cl2", companyId: "comp_supermercado", name: "Anabel Martínez", phone: "829-555-8811", email: "anabel@gmail.com", rncOrCedula: "00118822334", points: 45, tier: "Bronce", creditLimit: 10000, currentDebt: 0, synced: true },
-    { id: "cust_boutique_cl1", companyId: "comp_boutique", name: "Patricia Peña", phone: "809-555-4321", email: "patricia@style.com", points: 820, tier: "Oro", creditLimit: 0, currentDebt: 0, synced: true }
-  ],
-  suppliers: [
-    { id: "sup_super_prov1", companyId: "comp_supermercado", name: "Distribuidora Corripio", contact: "Ramón Vargas", phone: "809-565-9999", email: "ventas@corripio.com.do" },
-    { id: "sup_super_prov2", companyId: "comp_supermercado", name: "Mercasid S.A.", contact: "Lic. Clara Medina", phone: "809-566-2000", email: "clara.medina@mercasid.com.do" },
-    { id: "sup_bistro_carnes", companyId: "comp_bistro", name: "Carnes Nacionales Selectas", contact: "Pedro Carnicero", phone: "829-555-1234", email: "pedro@carnesselectas.com" }
-  ],
-  purchaseOrders: [
-    { id: "po_super_1", companyId: "comp_supermercado", supplierId: "sup_super_prov2", supplierName: "Mercasid S.A.", date: "2026-07-15T09:00:00-07:00", items: [{ productId: "prod_super_aceite", qty: 100, cost: 215 }], total: 21500, status: "received", receivedDate: "2026-07-17T14:30:00-07:00" }
-  ],
-  expenses: [
-    { id: "exp_super_1", companyId: "comp_supermercado", branchId: "br_super_main", category: "Servicios Públicos", amount: 15500, date: "2026-07-18", description: "Pago energía eléctrica Edenorte", paymentMethod: "Transferencia Bancaria", approvedBy: "Juan Pablo" },
-    { id: "exp_bistro_1", companyId: "comp_bistro", branchId: "br_bistro_main", category: "Mantenimiento", amount: 3200, date: "2026-07-19", description: "Reparación condensador de nevera", paymentMethod: "Efectivo de Caja", approvedBy: "Chef Roberto" }
-  ],
-  tables: [
-    { id: "tbl_b_1", name: "Mesa 1", zone: "Salón Principal", status: "free", seats: 4 },
-    { id: "tbl_b_2", name: "Mesa 2", zone: "Salón Principal", status: "occupied", seats: 2, currentOrderId: "sale_suspended_m2" },
-    { id: "tbl_b_3", name: "Mesa 3", zone: "Terraza", status: "free", seats: 6 },
-    { id: "tbl_b_4", name: "Mesa 4", zone: "Terraza", status: "billing", seats: 4, currentOrderId: "sale_suspended_m4" },
-    { id: "tbl_b_vip1", name: "VIP Lounge", zone: "Área VIP", status: "free", seats: 10 }
-  ],
-  recipes: [
-    { id: "rec_pasta_alfredo", companyId: "comp_bistro", name: "Receta Fettuccine Alfredo", finishedProductId: "prod_bistro_pasta", ingredients: [{ rawMaterialId: "prod_bistro_raw_meat", qty: 0.15 }] }
-  ],
-  employees: [
-    { id: "emp_super_1", companyId: "comp_supermercado", name: "Yissel Ramos", role: "Cajero", commissionRate: 0.01, hourlyRate: 150, clockedIn: true, lastClockIn: "2026-07-19T08:00:00-07:00" },
-    { id: "emp_bistro_1", companyId: "comp_bistro", name: "Carlos Mesero", role: "Mesero", commissionRate: 0.08, hourlyRate: 100, clockedIn: false }
-  ],
-  auditLogs: [
-    { id: "aud_1", companyId: "comp_supermercado", userId: "usr_super_owner", userName: "Juan Pablo", role: "Propietario", date: "2026-07-19T08:15:00-07:00", action: "Configuración Inicial", details: "Activación del módulo de Facturación Fiscal", synced: true }
-  ],
-  cashSessions: [
-    { id: "cs_super_1", companyId: "comp_supermercado", branchId: "br_super_main", userId: "usr_super_cajero", userName: "María González", openDate: "2026-07-19T07:45:00-07:00", initialFund: 5000, cashIn: 0, cashOut: 0, status: "open", synced: true }
-  ]
+  products: [],
+  sales: [],
+  customers: [],
+  suppliers: [],
+  purchaseOrders: [],
+  expenses: [],
+  tables: [],
+  recipes: [],
+  employees: [],
+  auditLogs: [],
+  cashSessions: [],
+  deliveryOrders: [],
+  deliveryDrivers: []
 };
 
 // Transitional persistence: PostgreSQL JSONB is the durable source of truth.

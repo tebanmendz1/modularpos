@@ -54,17 +54,13 @@ export default function ManufactureModule({
   // Local state for recipes
   const [recipes, setRecipes] = useState<Recipe[]>(() => {
     const saved = localStorage.getItem(`pos_recipes_${activeCompany.id}`);
-    return saved ? JSON.parse(saved) : [
-      { id: "rec_pasta_alfredo", companyId: activeCompany.id, name: "Receta Fettuccine Alfredo con Pollo", finishedProductId: "prod_bistro_pasta", ingredients: [{ rawMaterialId: "prod_bistro_raw_meat", qty: 0.25 }] }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Local state for Manufacture Orders
   const [orders, setOrders] = useState<ManufactureOrder[]>(() => {
     const saved = localStorage.getItem(`pos_mfg_orders_${activeCompany.id}`);
-    return saved ? JSON.parse(saved) : [
-      { id: "mfg_1", recipeId: "rec_pasta_alfredo", recipeName: "Receta Fettuccine Alfredo con Pollo", qty: 20, date: new Date().toISOString(), status: "completed", warehouseId: "wh_bistro_kitchen" }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Creation States

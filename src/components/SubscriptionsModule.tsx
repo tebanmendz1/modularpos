@@ -51,30 +51,7 @@ export default function SubscriptionsModule({
   // Load existing member subscriptions
   const [subscriptions, setSubscriptions] = useState<Subscription[]>(() => {
     const saved = localStorage.getItem(`pos_subscriptions_${activeCompany.id}`);
-    return saved ? JSON.parse(saved) : [
-      { 
-        id: "sub_1", 
-        customerId: "cust_super_cl1", 
-        customerName: "Constructora Dominicana SRL", 
-        planId: "plan_premium", 
-        planName: "Membresía Premium Club", 
-        amount: 3000, 
-        nextBillingDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], 
-        status: "active", 
-        autoRenew: true 
-      },
-      { 
-        id: "sub_2", 
-        customerId: "cust_super_cl2", 
-        customerName: "Anabel Martínez", 
-        planId: "plan_basic", 
-        planName: "Membresía Standard", 
-        amount: 1500, 
-        nextBillingDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], 
-        status: "expired", 
-        autoRenew: false 
-      }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Assign modal

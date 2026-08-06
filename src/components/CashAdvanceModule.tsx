@@ -11,6 +11,7 @@ interface CashAdvanceModuleProps {
   activeCompany: Company;
   currentUser: User;
   activeBranch: Branch;
+  branches?: Branch[];
   cashSessions: CashSession[];
   sales: Sale[];
   onOpenCashSession: (session: CashSession) => void;
@@ -160,19 +161,19 @@ export default function CashAdvanceModule({
   const [targetBranchId, setTargetBranchId] = useState("");
   const [transfers, setTransfers] = useState<CashTransfer[]>(() => {
     const saved = localStorage.getItem(`pos_transfers_${activeCompany.id}`);
-    return saved ? JSON.parse(saved) : [
-      { id: "tr_1", fromBranchId: activeBranch.id, toBranchId: "br_super_east", amount: 15000, date: new Date().toISOString(), user: currentUser.name, status: "completed" }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
 
   // General movements
   const [movements, setMovements] = useState<CashFlowMovement[]>(() => {
     const saved = localStorage.getItem(`pos_movements_${activeCompany.id}`);
-    return saved ? JSON.parse(saved) : [
-      { id: "mov_1", type: "out", amount: 2500, reason: "Pago de material gastable de oficina", date: new Date().toISOString(), user: currentUser.name, reconciled: true },
-      { id: "mov_2", type: "in", amount: 10000, reason: "Inyección de fondo de contingencia", date: new Date().toISOString(), user: currentUser.name, reconciled: true }
-    ];
+    return saved ? JSON.parse(saved) : [];
   });
+
+  // Destination branches available for transfer (belonging to active company, excluding current active branch)
+  const otherBranches = (branches || []).filter(
+    (b) => b.companyId === activeCompany.id && b.id !== activeBranch.id
+  );
 
   // Calculate stats for current active session sales
   const sessionSales = sales.filter(s => 
@@ -806,11 +807,22 @@ export default function CashAdvanceModule({
                 Auditoría / Conciliación Express
               </button>
               <button
-                onClick={() => setShowTransferModal(true)}
-                className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs py-2 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => {
+                  if (otherBranches.length === 0) {
+                    alert(`Opción no disponible: Su empresa (${activeCompany.name}) solo posee 1 sucursal activa (${activeBranch.name}). Para realizar transferencias inter-sucursal, necesita al menos 2 sucursales registradas.`);
+                    return;
+                  }
+                  setShowTransferModal(true);
+                }}
+                className={`w-full border font-bold text-xs py-2 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer ${
+                  otherBranches.length === 0
+                    ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                    : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                }`}
+                title={otherBranches.length === 0 ? "Su empresa cuenta con 1 sola sucursal" : "Transferir fondos a otra sucursal"}
               >
                 <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin-slow" />
-                Transferir entre Cajas/Sucursales
+                Transferir entre Cajas/Sucursales {otherBranches.length === 0 ? "(Sucursal Única)" : ""}
               </button>
             </div>
           </div>
@@ -1108,17 +1120,25 @@ export default function CashAdvanceModule({
 
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-slate-700 block">Sucursal de Destino *</label>
-              <select
-                required
-                value={targetBranchId}
-                onChange={(e) => setTargetBranchId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden text-slate-800 font-bold"
-              >
-                <option value="">Seleccione Sucursal de Destino...</option>
-                <option value="br_super_east">Don Pablo Zona Oriental</option>
-                <option value="br_bistro_main">Bistro Piantini</option>
-                <option value="br_boutique_main">Boutique Naco</option>
-              </select>
+              {otherBranches.length === 0 ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] font-medium leading-relaxed">
+                  ⚠️ <b>Sucursal Única:</b> Su empresa cuenta con 1 sola sucursal activa ({activeBranch.name}). No existen otras sucursales para recibir transferencias de fondos.
+                </div>
+              ) : (
+                <select
+                  required
+                  value={targetBranchId}
+                  onChange={(e) => setTargetBranchId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden text-slate-800 font-bold cursor-pointer"
+                >
+                  <option value="">Seleccione Sucursal de Destino...</option>
+                  {otherBranches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} {b.address ? `(${b.address})` : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="flex gap-3 justify-end border-t border-slate-100 pt-4">
@@ -1131,7 +1151,8 @@ export default function CashAdvanceModule({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                disabled={otherBranches.length === 0}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
                 Despachar Transferencia
               </button>
