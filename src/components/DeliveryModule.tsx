@@ -2,13 +2,13 @@ import React, { useState } from "react";
 import { MapPin, Plus, CheckCircle, Navigation, Clock, User, Phone, Check, RefreshCw, Layers, Settings, Truck } from "lucide-react";
 import { Company, Branch } from "../types";
 
-const AVAILABLE_DRIVERS = [
-  { name: "Carlos Motoconcho", phone: "809-555-0111" },
-  { name: "Franklin Delivery", phone: "809-555-0222" },
-  { name: "Pedro Expreso", phone: "829-555-0333" },
-  { name: "Miguel RapidSend", phone: "849-555-0444" },
-  { name: "Delivery Propio Local", phone: "" },
-];
+interface DriverItem {
+  id: string;
+  name: string;
+  phone: string;
+  vehicle?: string;
+  active?: boolean;
+}
 
 interface DeliveryOrder {
   id: string;
@@ -37,12 +37,56 @@ export default function DeliveryModule({
   const [activeSubTab, setActiveSubTab] = useState<"active" | "history" | "config">("active");
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
 
-  // Delivery order list state - seeded with demo orders
-  const [deliveries, setDeliveries] = useState<DeliveryOrder[]>([
-    { id: "del_1", customerName: "Clara Ortiz", phone: "809-555-8833", address: "Calle Las Damas #10, Zona Colonial", courierName: "Carlos Motoconcho", amount: 1250, status: "preparing", notes: "Llamar antes de llegar", createdTime: new Date(Date.now() - 25 * 60000).toISOString() },
-    { id: "del_2", customerName: "Marcos Peña", phone: "829-555-4422", address: "Av. Abraham Lincoln, Torre 3, Apt. 4B", courierName: "Franklin Delivery", amount: 2800, status: "dispatched", notes: "Cobrar con tarjeta (llevar verifone)", createdTime: new Date(Date.now() - 50 * 60000).toISOString() },
-    { id: "del_3", customerName: "Silvia Méndez", phone: "809-555-1199", address: "Calle Bella Vista #32", courierName: "Carlos Motoconcho", amount: 650, status: "delivered", notes: "Dejar en recepción", createdTime: new Date(Date.now() - 120 * 60000).toISOString() }
-  ]);
+  // Delivery order list state - initial state completely clean with ZERO demo orders
+  const [deliveries, setDeliveries] = useState<DeliveryOrder[]>([]);
+
+  // Registered drivers dynamic list state
+  const [drivers, setDrivers] = useState<DriverItem[]>([]);
+  const [showAddDriverModal, setShowAddDriverModal] = useState(false);
+  const [newDriverName, setNewDriverName] = useState("");
+  const [newDriverPhone, setNewDriverPhone] = useState("");
+  const [newDriverVehicle, setNewDriverVehicle] = useState("Motocicleta");
+  const [savingDriver, setSavingDriver] = useState(false);
+
+  // Fetch real drivers from POS API
+  const fetchDrivers = async () => {
+    try {
+      const res = await fetch("/api/pwa/drivers");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.drivers && Array.isArray(data.drivers)) {
+          setDrivers(data.drivers);
+        }
+      }
+    } catch (err) {
+      console.warn("Error cargando repartidores:", err);
+    }
+  };
+
+  // Create new delivery driver in POS API
+  const handleCreateDriverSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDriverName.trim()) return;
+    setSavingDriver(true);
+    try {
+      const res = await fetch("/api/pwa/drivers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newDriverName.trim(), phone: newDriverPhone.trim(), vehicle: newDriverVehicle }),
+      });
+      if (res.ok) {
+        await fetchDrivers();
+        setNewDriverName("");
+        setNewDriverPhone("");
+        setShowAddDriverModal(false);
+        onAddAudit("Repartidores", `Nuevo repartidor registrado: ${newDriverName}`);
+      }
+    } catch (err) {
+      console.warn("Error creando repartidor:", err);
+    } finally {
+      setSavingDriver(false);
+    }
+  };
 
   // Form states for new delivery
   const [custName, setCustName] = useState("");
@@ -246,17 +290,24 @@ export default function DeliveryModule({
             createdTime: o.createdAt || new Date().toISOString()
           }));
 
-          setDeliveries((prev) => {
-            const liveMap = new Map(mapped.map((m) => [m.id, m]));
-            const remaining = prev.filter((p) => !liveMap.has(p.id));
-            return [...mapped, ...remaining];
-          });
+          setDeliveries(mapped);
         }
       }
     } catch (err) {
       console.warn("Error cargando pedidos PWA en POS:", err);
     }
   };
+
+  // Assign driver modal state
+  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState("");
+
+  React.useEffect(() => {
+    fetchLiveDeliveries();
+    fetchDrivers();
+    const interval = setInterval(fetchLiveDeliveries, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Assign a driver to an order (persists in POS DB, driver sees it in PWA immediately)
   const handleAssignDriver = async (orderId: string, driverName: string, driverPhone: string) => {
@@ -304,15 +355,6 @@ export default function DeliveryModule({
     }
   };
 
-  // Assign driver modal state
-  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
-  const [selectedDriver, setSelectedDriver] = useState(AVAILABLE_DRIVERS[0].name);
-
-  React.useEffect(() => {
-    fetchLiveDeliveries();
-    const interval = setInterval(fetchLiveDeliveries, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const activeDeliveries = deliveries.filter((d) => d.status !== "delivered" && d.status !== "cancelled" && d.status !== "canceled");
   const historyDeliveries = deliveries.filter((d) => d.status === "delivered" || d.status === "cancelled" || d.status === "canceled");
@@ -882,13 +924,23 @@ export default function DeliveryModule({
       {/* MODAL: ASSIGN DRIVER */}
       {assigningOrderId && (() => {
         const order = deliveries.find((d) => d.id === assigningOrderId);
-        const driverInfo = AVAILABLE_DRIVERS.find((d) => d.name === selectedDriver) || AVAILABLE_DRIVERS[0];
+        const currentDriverName = selectedDriver || (drivers.length > 0 ? drivers[0].name : "");
+        const selectedDriverObj = drivers.find((d) => d.name === currentDriverName) || { name: currentDriverName, phone: "" };
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100">
-              <div className="flex items-center gap-2 mb-4">
-                <Truck className="w-5 h-5 text-violet-600" />
-                <h3 className="text-base font-extrabold text-slate-900">Asignar Repartidor</h3>
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-violet-600" />
+                  <h3 className="text-base font-extrabold text-slate-900">Asignar Repartidor</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddDriverModal(true)}
+                  className="bg-violet-50 hover:bg-violet-100 text-violet-700 text-[11px] font-bold px-2 py-1 rounded-lg border border-violet-200 cursor-pointer flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> Nuevo
+                </button>
               </div>
 
               {order && (
@@ -903,15 +955,19 @@ export default function DeliveryModule({
               <div className="mb-4">
                 <label className="block text-xs font-bold text-slate-700 mb-1">Seleccionar Repartidor:</label>
                 <select
-                  value={selectedDriver}
+                  value={currentDriverName}
                   onChange={(e) => setSelectedDriver(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none bg-white text-slate-900 font-semibold cursor-pointer"
                 >
-                  {AVAILABLE_DRIVERS.map((d) => (
-                    <option key={d.name} value={d.name} className="bg-white text-slate-900 font-semibold py-1">
-                      {d.name}{d.phone ? ` — ${d.phone}` : ''}
-                    </option>
-                  ))}
+                  {drivers.length > 0 ? (
+                    drivers.map((d) => (
+                      <option key={d.id || d.name} value={d.name} className="bg-white text-slate-900 font-semibold py-1">
+                        {d.name}{d.phone ? ` — ${d.phone}` : ''} ({d.vehicle || 'Moto'})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="Repartidor Asignado">Repartidor por defecto</option>
+                  )}
                 </select>
               </div>
 
@@ -929,7 +985,7 @@ export default function DeliveryModule({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleAssignDriver(assigningOrderId, selectedDriver, driverInfo.phone)}
+                  onClick={() => handleAssignDriver(assigningOrderId, currentDriverName, selectedDriverObj.phone)}
                   className="px-5 py-2 text-xs font-extrabold bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   <Truck className="w-4 h-4" />
@@ -940,6 +996,84 @@ export default function DeliveryModule({
           </div>
         );
       })()}
+
+      {/* MODAL: REGISTRAR NUEVO REPARTIDOR */}
+      {showAddDriverModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <User className="w-5 h-5 text-indigo-600" />
+                Registrar Nuevo Repartidor
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddDriverModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateDriverSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Nombre Completo del Repartidor *</label>
+                <input
+                  type="text"
+                  value={newDriverName}
+                  onChange={(e) => setNewDriverName(e.target.value)}
+                  placeholder="Ej: Carlos Ramírez"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Teléfono / WhatsApp</label>
+                <input
+                  type="text"
+                  value={newDriverPhone}
+                  onChange={(e) => setNewDriverPhone(e.target.value)}
+                  placeholder="Ej: 809-555-0199"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Tipo de Vehículo</label>
+                <select
+                  value={newDriverVehicle}
+                  onChange={(e) => setNewDriverVehicle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold cursor-pointer"
+                >
+                  <option value="Motocicleta">Motocicleta</option>
+                  <option value="Passola">Passola</option>
+                  <option value="Bicicleta">Bicicleta</option>
+                  <option value="Automóvil">Automóvil</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddDriverModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingDriver}
+                  className="px-5 py-2 text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  {savingDriver ? "Guardando..." : "Guardar Repartidor"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

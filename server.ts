@@ -1856,6 +1856,54 @@ app.get("/api/pwa/driver/orders", (req, res) => {
   return res.json({ success: true, count: orders.length, orders });
 });
 
+// 4b. Driver API: List registered delivery drivers
+app.get("/api/pwa/drivers", (req, res) => {
+  const db = readDb();
+  if (!db.deliveryDrivers || db.deliveryDrivers.length === 0) {
+    db.deliveryDrivers = [
+      { id: "drv_1", name: "Carlos Motoconcho", phone: "809-555-0111", vehicle: "Motocicleta", active: true },
+      { id: "drv_2", name: "Franklin Delivery", phone: "809-555-0222", vehicle: "Passola", active: true },
+      { id: "drv_3", name: "Delivery Propio Local", phone: "", vehicle: "Vehículo Empresa", active: true },
+    ];
+  }
+  return res.json({ success: true, count: db.deliveryDrivers.length, drivers: db.deliveryDrivers });
+});
+
+// 4c. Driver API: Create new delivery driver
+app.post("/api/pwa/drivers", async (req, res) => {
+  const { name, phone, vehicle } = req.body;
+  if (!name) return res.status(400).json({ success: false, error: "Nombre del repartidor es requerido" });
+
+  const db = readDb();
+  if (!db.deliveryDrivers) db.deliveryDrivers = [];
+
+  const newDriver = {
+    id: "drv_" + Date.now(),
+    name,
+    phone: phone || "",
+    vehicle: vehicle || "Motocicleta",
+    active: true,
+    createdAt: new Date().toISOString(),
+  };
+
+  db.deliveryDrivers.push(newDriver);
+  await writeDb(db);
+
+  return res.json({ success: true, message: "Repartidor registrado con éxito", driver: newDriver });
+});
+
+// 4d. Driver API: Delete driver
+app.delete("/api/pwa/drivers/:driverId", async (req, res) => {
+  const { driverId } = req.params;
+  const db = readDb();
+  if (!db.deliveryDrivers) db.deliveryDrivers = [];
+
+  db.deliveryDrivers = db.deliveryDrivers.filter((d: any) => d.id !== driverId);
+  await writeDb(db);
+
+  return res.json({ success: true, message: "Repartidor eliminado" });
+});
+
 // 5. Driver API: Mark order as delivered with photo proof
 app.post("/api/pwa/driver/deliver", async (req, res) => {
   const { orderId, proofPhotoUrl } = req.body;
