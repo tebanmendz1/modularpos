@@ -1735,15 +1735,21 @@ app.post("/api/pwa/orders", async (req, res) => {
 
   const orderId = "ORD-" + Math.floor(1000 + Math.random() * 9000);
   
+  const matchedCompany = db.companies?.find((c: any) => c.id === companyId) || db.companies?.[0];
+  const resolvedRestaurantCoords = (Array.isArray(req.body.restaurantCoords) && req.body.restaurantCoords.length === 2)
+    ? req.body.restaurantCoords
+    : (matchedCompany?.coords || [18.4861, -69.9312]);
+  const resolvedRestaurantName = req.body.restaurantName || matchedCompany?.name || "Restaurante POS";
+
   const newDeliveryOrder = {
     id: orderId,
-    companyId: companyId || "comp_default",
+    companyId: companyId || matchedCompany?.id || "comp_default",
     customerName: customerName || "Cliente PWA",
     customerPhone: customerPhone || "+1 809-555-0100",
     deliveryAddress: deliveryAddress || "Dirección por GPS",
     customerCoords: customerCoords || [18.4720, -69.9150],
-    restaurantName: db.companies?.find((c: any) => c.id === companyId)?.name || "Restaurante POS",
-    restaurantCoords: [18.4861, -69.9312],
+    restaurantName: resolvedRestaurantName,
+    restaurantCoords: resolvedRestaurantCoords,
     status: "assigned",
     items: items || [],
     total: Number(total || 0),
