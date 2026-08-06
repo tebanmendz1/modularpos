@@ -12,6 +12,17 @@ dotenv.config();
 const app = express();
 app.use(express.json({ limit: "12mb" }));
 
+// Enable CORS for PWA and Mobile Clients
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 const PORT = Number(process.env.PORT || 3000);
 const DB_FILE = path.join(process.cwd(), "db_store.json");
 const DATABASE_URL = process.env.DATABASE_URL?.trim();
