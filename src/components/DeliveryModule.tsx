@@ -905,10 +905,12 @@ export default function DeliveryModule({
                 <select
                   value={selectedDriver}
                   onChange={(e) => setSelectedDriver(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none bg-white"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none bg-white text-slate-900 font-semibold cursor-pointer"
                 >
                   {AVAILABLE_DRIVERS.map((d) => (
-                    <option key={d.name} value={d.name}>{d.name}{d.phone ? ` — ${d.phone}` : ''}</option>
+                    <option key={d.name} value={d.name} className="bg-white text-slate-900 font-semibold py-1">
+                      {d.name}{d.phone ? ` — ${d.phone}` : ''}
+                    </option>
                   ))}
                 </select>
               </div>

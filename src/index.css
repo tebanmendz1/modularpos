@@ -1,1 +1,18 @@
 @import "tailwindcss";
+
+select {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
+option {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  font-weight: 600 !important;
+  padding: 4px 8px !important;
+}
+
+option:checked {
+  color: #ffffff !important;
+  background-color: #2563eb !important;
+}
