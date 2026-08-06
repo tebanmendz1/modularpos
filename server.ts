@@ -1627,12 +1627,15 @@ app.get("/api/pwa/businesses", (req, res) => {
   const rawCompanies = db.companies || [];
 
   const businesses = rawCompanies.map((c: any, idx: number) => {
+    const branch = (db.branches || []).find((b: any) => b.companyId === c.id || b.company_id === c.id);
+    const resolvedAddress = c.address || (branch ? branch.address : null) || "Av. Winston Churchill #102, Santo Domingo";
+
     return {
       id: c.id,
       name: c.name,
       category: c.plan || "Gourmet & Restaurant",
       logo: c.logo && c.logo.startsWith("http") ? c.logo : `https://george-fx.github.io/delisty-data/dishes/0${(idx % 5) + 1}.jpg`,
-      address: c.address || "Av. Winston Churchill #102, Santo Domingo",
+      address: resolvedAddress,
       serviceTime: c.serviceTime || "08:00 AM - 11:00 PM",
       banner: c.banner || `https://george-fx.github.io/delisty-data/offers/0${(idx % 3) + 1}.jpg`,
       rating: c.rating || 4.8,
@@ -1650,7 +1653,6 @@ app.get("/api/pwa/businesses", (req, res) => {
 // 1.1 Update business delivery settings (Logo, Address, Coords, Hours, Delivery Fees)
 app.post("/api/pwa/businesses/config", async (req, res) => {
   const { companyId, logo, address, coords, serviceTime, baseDeliveryFee, perKmRate } = req.body;
-  if (!companyId) return res.status(400).json({ success: false, error: "companyId es requerido" });
 
   const db = readDb();
   if (!db.companies) db.companies = [];
@@ -1661,12 +1663,21 @@ app.post("/api/pwa/businesses/config", async (req, res) => {
   }
 
   if (company) {
-    if (logo) company.logo = logo;
-    if (address) company.address = address;
-    if (coords) company.coords = coords;
-    if (serviceTime) company.serviceTime = serviceTime;
+    if (logo !== undefined) company.logo = logo;
+    if (address !== undefined) company.address = address;
+    if (coords !== undefined) company.coords = coords;
+    if (serviceTime !== undefined) company.serviceTime = serviceTime;
     if (baseDeliveryFee !== undefined) company.baseDeliveryFee = Number(baseDeliveryFee);
     if (perKmRate !== undefined) company.perKmRate = Number(perKmRate);
+
+    // Also update address in db.branches if matching
+    if (db.branches && address) {
+      db.branches.forEach((b: any) => {
+        if (b.companyId === company.id || b.company_id === company.id) {
+          b.address = address;
+        }
+      });
+    }
 
     await writeDb(db);
     return res.json({ success: true, message: "Configuración de negocio guardada en POS", company });

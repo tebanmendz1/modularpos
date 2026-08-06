@@ -53,6 +53,33 @@ export default function DeliveryModule({
   const [savingCfg, setSavingCfg] = useState(false);
   const [detectingGps, setDetectingGps] = useState(false);
 
+  // Load existing business config from POS database
+  const fetchCurrentCompanyConfig = async () => {
+    try {
+      const res = await fetch("/api/pwa/businesses");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.businesses && Array.isArray(data.businesses)) {
+          const match = data.businesses.find((b: any) => b.id === activeCompany.id) || data.businesses[0];
+          if (match) {
+            if (match.logo) setCfgLogo(match.logo);
+            if (match.address) setCfgAddress(match.address);
+            if (match.coords) setCfgCoords(`${match.coords[0]}, ${match.coords[1]}`);
+            if (match.serviceTime) setCfgServiceTime(match.serviceTime);
+            if (match.baseDeliveryFee !== undefined) setCfgBaseFee(match.baseDeliveryFee);
+            if (match.perKmRate !== undefined) setCfgPerKmRate(match.perKmRate);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Error cargando configuración guardada del negocio:", err);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchCurrentCompanyConfig();
+  }, [activeCompany?.id]);
+
   // Map Pin Picker Modal states
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapTempCoords, setMapTempCoords] = useState<[number, number]>([18.4861, -69.9312]);
