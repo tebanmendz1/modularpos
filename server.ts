@@ -1688,6 +1688,26 @@ app.post("/api/pwa/businesses/config", async (req, res) => {
       company.mainAddress = address;
     }
     if (coords !== undefined) company.coords = coords;
+
+    // Auto-geocode address if coords are default or missing
+    if (address && (!company.coords || (company.coords[0] === 18.4861 && company.coords[1] === -69.9312))) {
+      try {
+        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`, {
+          headers: { 'User-Agent': 'DelistyPOS/1.0' }
+        });
+        if (geoRes.ok) {
+          const geoData: any = await geoRes.json();
+          if (Array.isArray(geoData) && geoData.length > 0) {
+            const lat = parseFloat(geoData[0].lat);
+            const lon = parseFloat(geoData[0].lon);
+            if (!isNaN(lat) && !isNaN(lon)) {
+              company.coords = [lat, lon];
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     if (serviceTime !== undefined) company.serviceTime = serviceTime;
     if (baseDeliveryFee !== undefined) company.baseDeliveryFee = Number(baseDeliveryFee);
     if (perKmRate !== undefined) company.perKmRate = Number(perKmRate);
@@ -1698,7 +1718,7 @@ app.post("/api/pwa/businesses/config", async (req, res) => {
         if (b.companyId === company.id || b.company_id === company.id) {
           b.address = address;
           b.registeredAddress = address;
-          if (coords) b.coords = coords;
+          if (company.coords) b.coords = company.coords;
         }
       });
     }
@@ -1866,8 +1886,24 @@ app.post("/api/pwa/orders/:orderId/assign-driver", async (req, res) => {
   const db = readDb();
   if (!db.deliveryOrders) db.deliveryOrders = [];
 
-  const order = db.deliveryOrders.find((o: any) => o.id === orderId);
-  if (!order) return res.status(404).json({ success: false, error: "Pedido no encontrado" });
+  let order = db.deliveryOrders.find((o: any) => o.id === orderId);
+  if (!order) {
+    order = {
+      id: orderId,
+      companyId: req.body.companyId || "comp_supermercado",
+      customerName: req.body.customerName || "Cliente PWA",
+      customerPhone: req.body.customerPhone || "",
+      deliveryAddress: req.body.deliveryAddress || "Dirección por GPS",
+      customerCoords: req.body.customerCoords || [18.4720, -69.9150],
+      restaurantName: req.body.restaurantName || "Supermercado Don Pablo",
+      restaurantCoords: req.body.restaurantCoords || [18.4861, -69.9312],
+      status: status || "driver_assigned",
+      items: req.body.items || [],
+      total: Number(req.body.total || 0),
+      createdAt: new Date().toISOString()
+    };
+    db.deliveryOrders.push(order);
+  }
 
   order.driverName = driverName || order.driverName || "Repartidor Asignado";
   order.driverPhone = driverPhone || order.driverPhone || "";
@@ -1893,8 +1929,24 @@ app.post("/api/pwa/orders/:orderId/status", async (req, res) => {
   const db = readDb();
   if (!db.deliveryOrders) db.deliveryOrders = [];
 
-  const order = db.deliveryOrders.find((o: any) => o.id === orderId);
-  if (!order) return res.status(404).json({ success: false, error: "Pedido no encontrado" });
+  let order = db.deliveryOrders.find((o: any) => o.id === orderId);
+  if (!order) {
+    order = {
+      id: orderId,
+      companyId: req.body.companyId || "comp_supermercado",
+      customerName: req.body.customerName || "Cliente PWA",
+      customerPhone: req.body.customerPhone || "",
+      deliveryAddress: req.body.deliveryAddress || "Dirección por GPS",
+      customerCoords: req.body.customerCoords || [18.4720, -69.9150],
+      restaurantName: req.body.restaurantName || "Supermercado Don Pablo",
+      restaurantCoords: req.body.restaurantCoords || [18.4861, -69.9312],
+      status: status || "assigned",
+      items: req.body.items || [],
+      total: Number(req.body.total || 0),
+      createdAt: new Date().toISOString()
+    };
+    db.deliveryOrders.push(order);
+  }
 
   order.status = status;
   order.updatedAt = new Date().toISOString();
