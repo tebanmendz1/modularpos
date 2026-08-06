@@ -1849,10 +1849,25 @@ app.get("/api/pwa/orders/client", (req, res) => {
   return res.json({ success: true, count: orders.length, orders });
 });
 
-// 4. Driver API: Get assigned delivery orders
+// 4. Driver API: Get assigned delivery orders for specific logged-in driver
 app.get("/api/pwa/driver/orders", (req, res) => {
+  const { driverName, driverId } = req.query;
   const db = readDb();
-  const orders = db.deliveryOrders || [];
+  let orders = db.deliveryOrders || [];
+
+  if (driverName || driverId) {
+    const targetName = (driverName as string || "").toLowerCase().trim();
+    const targetId = (driverId as string || "").toLowerCase().trim();
+
+    orders = orders.filter((o: any) => {
+      const oDriverName = (o.driverName || o.courierName || "").toLowerCase().trim();
+      const oDriverId = (o.driverId || "").toLowerCase().trim();
+      return (targetName && (oDriverName.includes(targetName) || targetName.includes(oDriverName))) || (targetId && oDriverId === targetId);
+    });
+  } else {
+    orders = [];
+  }
+
   return res.json({ success: true, count: orders.length, orders });
 });
 
