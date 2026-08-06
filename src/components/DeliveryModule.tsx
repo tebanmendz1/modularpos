@@ -264,12 +264,12 @@ export default function DeliveryModule({
       const res = await fetch(`/api/pwa/orders/${orderId}/assign-driver`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ driverName, driverPhone, status: "picked_up" }),
+        body: JSON.stringify({ driverName, driverPhone, status: "driver_assigned" }),
       });
       if (res.ok) {
         setDeliveries((prev) =>
           prev.map((d) => d.id === orderId
-            ? { ...d, courierName: driverName, courierPhone: driverPhone, status: "picked_up" as any }
+            ? { ...d, courierName: driverName, courierPhone: driverPhone, status: "driver_assigned" as any }
             : d
           )
         );
@@ -642,14 +642,19 @@ export default function DeliveryModule({
                       {del.notes && <div className="text-[10px] text-slate-500 truncate max-w-xs">{del.notes}</div>}
                     </td>
                     <td className="p-3">
-                      {del.status === "preparing" && (
+                      {(del.status === "assigned" || del.status === "preparing") && (
                         <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> En Preparación
+                          📋 Confirmado
                         </span>
                       )}
-                      {del.status === "dispatched" && (
+                      {(del.status === "driver_assigned" || del.status === "ready") && (
+                        <span className="bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                          🛵 Delivery Asignado ({del.courierName || 'Asignado'})
+                        </span>
+                      )}
+                      {(del.status === "dispatched" || del.status === "picked_up" || del.status === "shipping" || del.status === "in_transit") && (
                         <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                          <Navigation className="w-3 h-3 animate-bounce" /> En Camino / Despachado
+                          <Navigation className="w-3 h-3 animate-bounce" /> Delivery en Camino
                         </span>
                       )}
                       {del.status === "delivered" && (
@@ -657,7 +662,7 @@ export default function DeliveryModule({
                           <Check className="w-3 h-3" /> Entregado
                         </span>
                       )}
-                      {del.status === "cancelled" && (
+                      {(del.status === "cancelled" || del.status === "canceled") && (
                         <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg">
                           Cancelado
                         </span>
@@ -665,43 +670,38 @@ export default function DeliveryModule({
                     </td>
                     <td className="p-3 text-right">
                       <div className="flex justify-end gap-1 flex-wrap">
-
-                        {/* Assign driver button (for unassigned or preparing orders) */}
-                        {(del.status === "assigned" || del.status === "preparing") && (
+                        {/* Assign driver button */}
+                        {del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
                           <button
                             onClick={() => { setAssigningOrderId(del.id); setSelectedDriver(del.courierName !== "Sin asignar" ? del.courierName : AVAILABLE_DRIVERS[0].name); }}
                             className="bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
                           >
-                            <Truck className="w-3 h-3" /> Asignar Repartidor
+                            <Truck className="w-3 h-3" /> {del.courierName && del.courierName !== "Sin asignar" ? "Reasignar" : "Asignar Delivery"}
                           </button>
                         )}
 
-                        {/* Status progression buttons */}
-                        {(del.status === "assigned" || del.status === "preparing") && (
+                        {/* Despachado button */}
+                        {del.status !== "dispatched" && del.status !== "picked_up" && del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
                           <button
-                            onClick={() => handleUpdateStatusApi(del.id, "ready")}
-                            className="bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                            onClick={() => handleUpdateStatusApi(del.id, "dispatched")}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
                           >
-                            ✓ Listo
+                            🚀 Despachado
                           </button>
                         )}
-                        {del.status === "ready" && (
-                          <button
-                            onClick={() => handleUpdateStatusApi(del.id, "picked_up")}
-                            className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
-                          >
-                            🛵 Despachar
-                          </button>
-                        )}
-                        {(del.status === "dispatched" || del.status === "picked_up") && (
+
+                        {/* Entregado button */}
+                        {(del.status === "dispatched" || del.status === "picked_up" || del.status === "driver_assigned" || del.status === "ready") && (
                           <button
                             onClick={() => handleUpdateStatusApi(del.id, "delivered")}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
                           >
                             ✓ Entregado
                           </button>
                         )}
-                        {del.status !== "delivered" && del.status !== "cancelled" && (
+
+                        {/* Cancel button */}
+                        {del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
                           <button
                             onClick={() => handleUpdateStatusApi(del.id, "canceled")}
                             className="bg-red-100 hover:bg-red-200 text-red-700 text-[11px] font-bold px-2 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"

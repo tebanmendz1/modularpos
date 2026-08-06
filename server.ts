@@ -1871,19 +1871,21 @@ app.post("/api/pwa/orders/:orderId/assign-driver", async (req, res) => {
 
   order.driverName = driverName || order.driverName || "Repartidor Asignado";
   order.driverPhone = driverPhone || order.driverPhone || "";
-  order.status = status || "picked_up";
+  order.courierName = order.driverName;
+  order.courierPhone = order.driverPhone;
+  order.status = status || "driver_assigned";
   order.assignedAt = new Date().toISOString();
 
   await writeDb(db);
   return res.json({ success: true, message: "Repartidor asignado exitosamente", order });
 });
 
-// 5c. POS: Update order status (preparing → dispatched → delivered)
+// 5c. POS: Update order status (assigned → driver_assigned → dispatched → delivered)
 app.post("/api/pwa/orders/:orderId/status", async (req, res) => {
   const { orderId } = req.params;
   const { status } = req.body;
 
-  const validStatuses = ["assigned", "preparing", "ready", "picked_up", "delivered", "canceled"];
+  const validStatuses = ["assigned", "preparing", "ready", "driver_assigned", "dispatched", "picked_up", "delivered", "canceled", "cancelled"];
   if (!status || !validStatuses.includes(status)) {
     return res.status(400).json({ success: false, error: `Estado inválido. Opciones: ${validStatuses.join(", ")}` });
   }
