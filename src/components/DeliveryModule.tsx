@@ -43,6 +43,43 @@ export default function DeliveryModule({
   const [orderAmount, setOrderAmount] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
 
+  // Fetch live delivery orders from PWA server endpoint
+  const fetchLiveDeliveries = async () => {
+    try {
+      const res = await fetch("/api/pwa/driver/orders");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.orders && Array.isArray(data.orders)) {
+          const mapped: DeliveryOrder[] = data.orders.map((o: any) => ({
+            id: o.id,
+            customerName: o.customerName || "Cliente PWA",
+            phone: o.customerPhone || "809-555-0100",
+            address: o.deliveryAddress || "Dirección PWA",
+            courierName: o.courierName || "Repartidor Asignado",
+            amount: Number(o.total || 0),
+            status: o.status === "assigned" || o.status === "pending" ? "preparing" : (o.status as any),
+            notes: (o.items || []).map((i: any) => `${i.quantity || 1}x ${i.name}`).join(", ") || o.paymentMethod || "Pedido PWA Delivery",
+            createdTime: o.createdAt || new Date().toISOString()
+          }));
+
+          setDeliveries((prev) => {
+            const liveMap = new Map(mapped.map((m) => [m.id, m]));
+            const remaining = prev.filter((p) => !liveMap.has(p.id));
+            return [...mapped, ...remaining];
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Error cargando pedidos PWA en POS:", err);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchLiveDeliveries();
+    const interval = setInterval(fetchLiveDeliveries, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const activeDeliveries = deliveries.filter((d) => d.status !== "delivered" && d.status !== "cancelled");
   const historyDeliveries = deliveries.filter((d) => d.status === "delivered" || d.status === "cancelled");
 

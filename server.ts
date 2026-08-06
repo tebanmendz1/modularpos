@@ -1624,26 +1624,55 @@ app.post("/api/catalog/generate", generateProductsHandler);
 // 1. Get businesses/companies with delivery or restaurant module active
 app.get("/api/pwa/businesses", (req, res) => {
   const db = readDb();
-  const companies = (db.companies || []).map((c: any) => {
-    const hasDelivery = (c.activeModules || []).some((m: string) =>
-      ["delivery", "restaurant", "pedidos", "restaurante"].includes(m.toLowerCase())
-    );
+  const rawCompanies = db.companies || [];
+
+  const businesses = rawCompanies.map((c: any, idx: number) => {
     return {
       id: c.id,
       name: c.name,
       category: c.plan || "Gourmet & Restaurant",
-      logo: "https://george-fx.github.io/delisty-data/dishes/01.jpg",
-      banner: "https://george-fx.github.io/delisty-data/offers/01.jpg",
-      rating: 4.8,
-      deliveryModuleActive: hasDelivery || true,
-      coords: [18.4861, -69.9312],
-      baseDeliveryFee: 1.5,
-      perKmRate: 0.75,
+      logo: c.logo && c.logo.startsWith("http") ? c.logo : `https://george-fx.github.io/delisty-data/dishes/0${(idx % 5) + 1}.jpg`,
+      address: c.address || "Av. Winston Churchill #102, Santo Domingo",
+      serviceTime: c.serviceTime || "08:00 AM - 11:00 PM",
+      banner: c.banner || `https://george-fx.github.io/delisty-data/offers/0${(idx % 3) + 1}.jpg`,
+      rating: c.rating || 4.8,
+      deliveryModuleActive: true,
+      coords: c.coords || [18.4861, -69.9312],
+      baseDeliveryFee: c.baseDeliveryFee !== undefined ? Number(c.baseDeliveryFee) : 1.5,
+      perKmRate: c.perKmRate !== undefined ? Number(c.perKmRate) : 0.75,
       estimatedTime: "25-35 min"
     };
   });
 
-  return res.json({ success: true, count: companies.length, businesses: companies });
+  return res.json({ success: true, count: businesses.length, businesses });
+});
+
+// 1.1 Update business delivery settings (Logo, Address, Coords, Hours, Delivery Fees)
+app.post("/api/pwa/businesses/config", async (req, res) => {
+  const { companyId, logo, address, coords, serviceTime, baseDeliveryFee, perKmRate } = req.body;
+  if (!companyId) return res.status(400).json({ success: false, error: "companyId es requerido" });
+
+  const db = readDb();
+  if (!db.companies) db.companies = [];
+
+  let company = db.companies.find((c: any) => c.id === companyId);
+  if (!company && db.companies.length > 0) {
+    company = db.companies[0];
+  }
+
+  if (company) {
+    if (logo) company.logo = logo;
+    if (address) company.address = address;
+    if (coords) company.coords = coords;
+    if (serviceTime) company.serviceTime = serviceTime;
+    if (baseDeliveryFee !== undefined) company.baseDeliveryFee = Number(baseDeliveryFee);
+    if (perKmRate !== undefined) company.perKmRate = Number(perKmRate);
+
+    await writeDb(db);
+    return res.json({ success: true, message: "Configuración de negocio guardada en POS", company });
+  }
+
+  return res.status(404).json({ success: false, error: "Empresa no encontrada" });
 });
 
 // 2. Get products of a company for PWA menu
