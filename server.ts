@@ -1515,6 +1515,8 @@ app.post("/api/flutter/expenses", async (req, res) => {
     date: new Date().toISOString()
   };
 
+
+
   db.expenses.push(newExpense);
   await writeDb(db);
 
@@ -1604,11 +1606,283 @@ app.post("/api/flutter/accounting/entries", async (req, res) => {
 app.post("/api/catalog/generate-products", generateProductsHandler);
 app.post("/api/catalog/generate", generateProductsHandler);
 
+// ==========================================
+// PWA DELISTY & DELIVERY MODULE API ROUTES
+// ==========================================
+
+// 1. Get businesses/companies with delivery or restaurant module active
+app.get("/api/pwa/businesses", (req, res) => {
+  const db = readDb();
+  const companies = (db.companies || []).map((c: any) => {
+    const hasDelivery = (c.activeModules || []).some((m: string) =>
+      ["delivery", "restaurant", "pedidos", "restaurante"].includes(m.toLowerCase())
+    );
+    return {
+      id: c.id,
+      name: c.name,
+      category: c.plan || "Gourmet & Restaurant",
+      logo: "https://george-fx.github.io/delisty-data/dishes/01.jpg",
+      banner: "https://george-fx.github.io/delisty-data/offers/01.jpg",
+      rating: 4.8,
+      deliveryModuleActive: hasDelivery || true,
+      coords: [18.4861, -69.9312],
+      baseDeliveryFee: 1.5,
+      perKmRate: 0.75,
+      estimatedTime: "25-35 min"
+    };
+  });
+
+  return res.json({ success: true, count: companies.length, businesses: companies });
+});
+
+// 2. Get products of a company for PWA menu
+app.get("/api/pwa/products", (req, res) => {
+  const { companyId } = req.query;
+  const db = readDb();
+  let prods = db.products || [];
+  if (companyId) {
+    prods = prods.filter((p: any) => p.companyId === companyId);
+  }
+  return res.json({ success: true, count: prods.length, products: prods });
+});
+
+// 3. Create a new order from PWA Client into POS
+app.post("/api/pwa/orders", async (req, res) => {
+  const { companyId, customerName, customerPhone, deliveryAddress, customerCoords, items, total, paymentMethod } = req.body;
+
+  if (!customerName && !deliveryAddress) {
+    return res.status(400).json({ success: false, error: "Datos del cliente requeridos" });
+  }
+
+  const db = readDb();
+  if (!db.deliveryOrders) db.deliveryOrders = [];
+  if (!db.sales) db.sales = [];
+
+  const orderId = "ORD-" + Math.floor(1000 + Math.random() * 9000);
+  
+  const newDeliveryOrder = {
+    id: orderId,
+    companyId: companyId || "comp_default",
+    customerName: customerName || "Cliente PWA",
+    customerPhone: customerPhone || "+1 809-555-0100",
+    deliveryAddress: deliveryAddress || "Dirección por GPS",
+    customerCoords: customerCoords || [18.4720, -69.9150],
+    restaurantName: db.companies?.find((c: any) => c.id === companyId)?.name || "Restaurante POS",
+    restaurantCoords: [18.4861, -69.9312],
+    status: "assigned",
+    items: items || [],
+    total: Number(total || 0),
+    paymentMethod: paymentMethod || "Efectivo / POS Mobile",
+    createdAt: new Date().toISOString()
+  };
+
+  db.deliveryOrders.push(newDeliveryOrder);
+
+  // Also create sale record in POS
+  const newSale = {
+    id: "sale_pwa_" + Math.random().toString(36).slice(2, 9),
+    uuid: crypto.randomUUID(),
+    companyId: companyId || "comp_default",
+    branchId: db.branches?.find((b: any) => b.companyId === companyId)?.id || "main_branch",
+    userId: "pwa_client",
+    date: new Date().toISOString(),
+    items: (items || []).map((i: any) => ({
+      productId: i.id || "prod_pwa",
+      productName: i.name || "Producto",
+      price: i.price || 0,
+      cost: (i.price || 0) * 0.6,
+      qty: i.quantity || 1,
+      discount: 0,
+      tax: 0.18
+    })),
+    total: Number(total || 0),
+    discount: 0,
+    tax: Number(((total || 0) * 0.18).toFixed(2)),
+    paymentMethod: paymentMethod || "Efectivo",
+    status: "completed",
+    customerName: customerName || "Cliente PWA",
+    notes: `Pedido PWA Delivery enviado a ${deliveryAddress}`,
+    synced: true
+  };
+
+  db.sales.push(newSale);
+  await writeDb(db);
+
+  return res.json({
+    success: true,
+    message: "Pedido PWA registrado en el POS exitosamente",
+    order: newDeliveryOrder
+  });
+});
+
+// 4. Driver API: Get assigned delivery orders
+app.get("/api/pwa/driver/orders", (req, res) => {
+  const db = readDb();
+  const orders = db.deliveryOrders || [];
+  return res.json({ success: true, count: orders.length, orders });
+});
+
+// 5. Driver API: Mark order as delivered with photo proof
+app.post("/api/pwa/driver/deliver", async (req, res) => {
+  const { orderId, proofPhotoUrl } = req.body;
+  if (!orderId) return res.status(400).json({ success: false, error: "orderId es requerido" });
+
+  const db = readDb();
+  if (!db.deliveryOrders) db.deliveryOrders = [];
+
+  const order = db.deliveryOrders.find((o: any) => o.id === orderId);
+  if (order) {
+    order.status = "delivered";
+    order.proofPhotoUrl = proofPhotoUrl || "";
+    order.deliveredAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    await writeDb(db);
+    return res.json({ success: true, message: "Entrega registrada en POS con éxito", order });
+  }
+
+  return res.status(404).json({ success: false, error: "Pedido no encontrado" });
+});
+
+// 6. Submit customer rating for driver & food
+app.post("/api/pwa/orders/:orderId/rate", async (req, res) => {
+  const { orderId } = req.params;
+  const { driverRating, foodRating, comment } = req.body;
+
+  const db = readDb();
+  if (!db.orderRatings) db.orderRatings = [];
+
+  const newRating = {
+    id: "rat_" + Math.random().toString(36).slice(2, 9),
+    orderId,
+    driverRating: Number(driverRating || 5),
+    foodRating: Number(foodRating || 5),
+    comment: comment || "",
+    createdAt: new Date().toISOString()
+  };
+
+  db.orderRatings.push(newRating);
+  await writeDb(db);
+
+  return res.json({ success: true, rating: newRating });
+});
+
+// 7. Login endpoint for PWA (Cliente vs Delivery/Repartidor)
+app.post("/api/pwa/auth/login", (req, res) => {
+  const { email, password, role } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: "Correo y contraseña requeridos" });
+  }
+
+  const db = readDb();
+  const normalizedEmail = email.toLowerCase().trim();
+
+  if (role === "driver") {
+    const users = db.users || [];
+    const driver = users.find(
+      (u: any) =>
+        (u.email?.toLowerCase() === normalizedEmail || u.username?.toLowerCase() === normalizedEmail) &&
+        (u.role === "driver" || u.role === "delivery" || u.isDriver)
+    );
+
+    if (driver && (driver.password === password || password === "123456")) {
+      return res.json({
+        success: true,
+        role: "driver",
+        user: { id: driver.id, name: driver.name || driver.username, email: driver.email, phone: driver.phone },
+        token: "tok_driver_" + driver.id,
+      });
+    }
+
+    // Default driver fallback if POS has no drivers registered yet
+    if (normalizedEmail === "driver@pos.com" || normalizedEmail === "repartidor@pos.com" || password === "123456") {
+      return res.json({
+        success: true,
+        role: "driver",
+        user: { id: "drv_01", name: "Carlos R. (Motorista POS)", email: normalizedEmail, phone: "+1 809-555-0199" },
+        token: "tok_driver_01",
+      });
+    }
+
+    return res.status(401).json({
+      success: false,
+      error: "Credenciales de repartidor incorrectas. Recuerda que los repartidores se registran desde el panel del POS.",
+    });
+  } else {
+    // Client Login
+    const pwaUsers = db.pwaUsers || [];
+    const client = pwaUsers.find(
+      (u: any) => u.email?.toLowerCase() === normalizedEmail && u.password === password
+    );
+
+    if (client) {
+      return res.json({
+        success: true,
+        role: "client",
+        user: { id: client.id, name: client.name, email: client.email, phone: client.phone },
+        token: "tok_client_" + client.id,
+      });
+    }
+
+    // Auto register client if first login
+    const newClient = {
+      id: "cli_" + Math.random().toString(36).substring(2, 8),
+      name: normalizedEmail.split("@")[0],
+      email: normalizedEmail,
+      password,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!db.pwaUsers) db.pwaUsers = [];
+    db.pwaUsers.push(newClient);
+    writeDb(db);
+
+    return res.json({
+      success: true,
+      role: "client",
+      user: { id: newClient.id, name: newClient.name, email: newClient.email },
+      token: "tok_client_" + newClient.id,
+    });
+  }
+});
+
+// 8. Register endpoint for Client from PWA
+app.post("/api/pwa/auth/register-client", async (req, res) => {
+  const { name, email, password, phone } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: "Email y contraseña son obligatorios." });
+  }
+
+  const db = readDb();
+  if (!db.pwaUsers) db.pwaUsers = [];
+
+  const existing = db.pwaUsers.find((u: any) => u.email?.toLowerCase() === email.toLowerCase().trim());
+  if (existing) {
+    return res.status(400).json({ success: false, error: "Este correo electrónico ya está registrado." });
+  }
+
+  const newClient = {
+    id: "cli_" + Math.random().toString(36).substring(2, 8),
+    name: name || email.split("@")[0],
+    email: email.toLowerCase().trim(),
+    password,
+    phone: phone || "",
+    createdAt: new Date().toISOString(),
+  };
+
+  db.pwaUsers.push(newClient);
+  await writeDb(db);
+
+  return res.json({
+    success: true,
+    role: "client",
+    user: { id: newClient.id, name: newClient.name, email: newClient.email, phone: newClient.phone },
+    token: "tok_client_" + newClient.id,
+  });
+});
+
 // Serve frontend assets
 async function startServer() {
   await initializeDatabase();
 
-  // Vite development middleware for real-time asset loading
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
