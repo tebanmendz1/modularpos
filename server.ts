@@ -1629,11 +1629,10 @@ app.get("/api/pwa/businesses", (req, res) => {
   const businesses = rawCompanies.map((c: any, idx: number) => {
     const branch = (db.branches || []).find((b: any) => b.companyId === c.id || b.company_id === c.id);
 
-    // Resolve address: company config > branch > meaningful fallback
+    // Resolve address: company config > branch > default fallback
     const resolvedAddress =
-      (c.address && c.address.trim() && c.address !== "Av. Winston Churchill #102, Santo Domingo" ? c.address : null) ||
-      (branch && branch.address && branch.address.trim() ? branch.address : null) ||
-      c.address ||
+      (c.address && c.address.trim() ? c.address.trim() : null) ||
+      (branch && branch.address && branch.address.trim() ? branch.address.trim() : null) ||
       "Sin dirección configurada";
 
     // Resolve logo: use configured logo if it's a valid URL, otherwise UI Avatars with company name
