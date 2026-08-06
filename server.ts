@@ -1859,14 +1859,8 @@ app.get("/api/pwa/driver/orders", (req, res) => {
 // 4b. Driver API: List registered delivery drivers
 app.get("/api/pwa/drivers", (req, res) => {
   const db = readDb();
-  if (!db.deliveryDrivers || db.deliveryDrivers.length === 0) {
-    db.deliveryDrivers = [
-      { id: "drv_1", name: "Carlos Motoconcho", phone: "809-555-0111", vehicle: "Motocicleta", active: true },
-      { id: "drv_2", name: "Franklin Delivery", phone: "809-555-0222", vehicle: "Passola", active: true },
-      { id: "drv_3", name: "Delivery Propio Local", phone: "", vehicle: "Vehículo Empresa", active: true },
-    ];
-  }
-  return res.json({ success: true, count: db.deliveryDrivers.length, drivers: db.deliveryDrivers });
+  const drivers = db.deliveryDrivers || [];
+  return res.json({ success: true, count: drivers.length, drivers });
 });
 
 // 4c. Driver API: Create new delivery driver
@@ -1953,7 +1947,7 @@ app.post("/api/pwa/orders/:orderId/assign-driver", async (req, res) => {
     db.deliveryOrders.push(order);
   }
 
-  order.driverName = driverName || order.driverName || "Repartidor Asignado";
+  order.driverName = driverName || order.driverName || "";
   order.driverPhone = driverPhone || order.driverPhone || "";
   order.courierName = order.driverName;
   order.courierPhone = order.driverPhone;
