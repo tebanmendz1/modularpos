@@ -53,6 +53,106 @@ export default function DeliveryModule({
   const [savingCfg, setSavingCfg] = useState(false);
   const [detectingGps, setDetectingGps] = useState(false);
 
+  // Map Pin Picker Modal states
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [mapTempCoords, setMapTempCoords] = useState<[number, number]>([18.4861, -69.9312]);
+  const [mapTempAddress, setMapTempAddress] = useState("");
+  const mapContainerRef = React.useRef<HTMLDivElement>(null);
+  const leafletMapRef = React.useRef<any>(null);
+  const leafletMarkerRef = React.useRef<any>(null);
+
+  const openMapPickerModal = () => {
+    const parts = cfgCoords.split(",").map((p) => parseFloat(p.trim()));
+    const initialCoords: [number, number] =
+      parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])
+        ? [parts[0], parts[1]]
+        : [18.4861, -69.9312];
+
+    setMapTempCoords(initialCoords);
+    setMapTempAddress(cfgAddress);
+    setShowMapModal(true);
+  };
+
+  React.useEffect(() => {
+    if (!showMapModal) return;
+
+    const loadLeaflet = async () => {
+      if (!(window as any).L) {
+        if (!document.getElementById("leaflet-css")) {
+          const link = document.createElement("link");
+          link.id = "leaflet-css";
+          link.rel = "stylesheet";
+          link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+          document.head.appendChild(link);
+        }
+
+        await new Promise<void>((resolve) => {
+          const script = document.createElement("script");
+          script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+          script.onload = () => resolve();
+          document.body.appendChild(script);
+        });
+      }
+
+      setTimeout(() => {
+        if (mapContainerRef.current && (window as any).L) {
+          const L = (window as any).L;
+          if (leafletMapRef.current) {
+            leafletMapRef.current.remove();
+          }
+
+          const map = L.map(mapContainerRef.current).setView(mapTempCoords, 16);
+          leafletMapRef.current = map;
+
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "© OpenStreetMap"
+          }).addTo(map);
+
+          const marker = L.marker(mapTempCoords, { draggable: true }).addTo(map);
+          leafletMarkerRef.current = marker;
+
+          const updateFromLatLng = async (lat: number, lng: number) => {
+            const newCoords: [number, number] = [lat, lng];
+            setMapTempCoords(newCoords);
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (data && data.display_name) {
+                  setMapTempAddress(data.display_name);
+                }
+              }
+            } catch (err) {
+              console.warn("Geocoding error:", err);
+            }
+          };
+
+          marker.on("dragend", () => {
+            const pos = marker.getLatLng();
+            updateFromLatLng(pos.lat, pos.lng);
+          });
+
+          map.on("click", (e: any) => {
+            marker.setLatLng(e.latlng);
+            updateFromLatLng(e.latlng.lat, e.latlng.lng);
+          });
+        }
+      }, 300);
+    };
+
+    loadLeaflet();
+  }, [showMapModal]);
+
+  const handleConfirmPinLocation = () => {
+    setCfgCoords(`${mapTempCoords[0].toFixed(6)}, ${mapTempCoords[1].toFixed(6)}`);
+    if (mapTempAddress) {
+      setCfgAddress(mapTempAddress);
+    }
+    setShowMapModal(false);
+    alert(`¡Pin del negocio ajustado!\nCoordenadas: ${mapTempCoords[0].toFixed(6)}, ${mapTempCoords[1].toFixed(6)}`);
+  };
+
   // Detect exact business GPS location
   const handleDetectBusinessGps = async () => {
     if (!navigator.geolocation) {
@@ -65,7 +165,7 @@ export default function DeliveryModule({
       async (pos) => {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
-        setCfgCoords(`${lat}, ${lon}`);
+        setCfgCoords(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
 
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
@@ -79,12 +179,12 @@ export default function DeliveryModule({
           console.warn("Error en geocodificación inversa:", err);
         } finally {
           setDetectingGps(false);
-          alert(`¡Ubicación exacta del negocio detectada por GPS!\nCoordenadas: ${lat}, ${lon}`);
+          alert(`¡Ubicación exacta del negocio detectada por GPS!\nCoordenadas: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
         }
       },
       (err) => {
         setDetectingGps(false);
-        alert("No se pudo obtener la ubicación GPS. Por favor asegúrese de permitir el acceso a la ubicación en su navegador.");
+        alert("No se pudo obtener la ubicación GPS. Por favor permita el acceso a la ubicación en su navegador.");
       },
       { enableHighAccuracy: true }
     );
@@ -337,14 +437,24 @@ export default function DeliveryModule({
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-xs font-bold text-slate-700">🗺️ Coordenadas GPS del Mapa (Latitud, Longitud):</label>
-                <button
-                  type="button"
-                  onClick={handleDetectBusinessGps}
-                  disabled={detectingGps}
-                  className="text-indigo-600 hover:text-indigo-800 text-[11px] font-bold underline cursor-pointer"
-                >
-                  Capturar GPS Actual
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDetectBusinessGps}
+                    disabled={detectingGps}
+                    className="text-indigo-600 hover:text-indigo-800 text-[11px] font-bold underline cursor-pointer"
+                  >
+                    Capturar GPS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openMapPickerModal}
+                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-extrabold px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Navigation className="w-3.5 h-3.5 text-emerald-600" />
+                    🗺️ Ajustar Pin en el Mapa
+                  </button>
+                </div>
               </div>
               <input
                 type="text"
@@ -354,7 +464,7 @@ export default function DeliveryModule({
                 className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
               />
               <span className="text-[11px] text-slate-400 mt-1 block">
-                Presione &quot;📍 Usar GPS del Dispositivo&quot; para obtener la posición física exacta de su local por GPS.
+                Presione &quot;📍 Usar GPS del Dispositivo&quot; o &quot;🗺️ Ajustar Pin en el Mapa&quot; para posicionar manualmente el pin exacto de su restaurante.
               </span>
             </div>
 
@@ -590,6 +700,64 @@ export default function DeliveryModule({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FOR ADJUSTING PIN LOCATION ON LEAFLET MAP */}
+      {showMapModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-indigo-600" />
+                📍 Ajustar Pin del Negocio en el Mapa Interactivo
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowMapModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Arrastre el marcador <b>📍</b> o haga clic en cualquier punto del mapa para establecer la posición física exacta de su restaurante.
+            </p>
+
+            <div
+              ref={mapContainerRef}
+              className="w-full h-80 rounded-2xl border border-slate-200 shadow-inner overflow-hidden"
+              style={{ minHeight: 320 }}
+            />
+
+            <div className="bg-slate-50 p-3 rounded-xl text-xs space-y-1">
+              <div className="font-bold text-slate-800">
+                Coordenadas Seleccionadas: <span className="font-mono text-indigo-600">{mapTempCoords[0].toFixed(6)}, {mapTempCoords[1].toFixed(6)}</span>
+              </div>
+              <div className="text-slate-600 truncate">
+                <b>Dirección estimada:</b> {mapTempAddress || "Cargando dirección..."}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowMapModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPinLocation}
+                className="px-5 py-2 text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                Confirmar Ubicación del Pin
+              </button>
+            </div>
           </div>
         </div>
       )}
