@@ -1642,13 +1642,8 @@ app.get("/api/pwa/businesses", (req, res) => {
       ? c.logo
       : `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || 'R')}&size=200&background=FF385C&color=fff&bold=true&rounded=true`;
 
-    // Check if delivery module is explicitly active for this company
-    const deliveryActive = !!(
-      c.deliveryModuleActive === true ||
-      c.deliveryActive === true ||
-      c.coords ||
-      c.baseDeliveryFee !== undefined
-    );
+    // Check if delivery module is active for this company (default to true unless explicitly set to false)
+    const deliveryActive = c.deliveryModuleActive !== false;
 
     return {
       id: c.id,
@@ -1674,7 +1669,7 @@ app.get("/api/pwa/businesses", (req, res) => {
 
 // 1.1 Update business delivery settings (Logo, Address, Coords, Hours, Delivery Fees)
 app.post("/api/pwa/businesses/config", async (req, res) => {
-  const { companyId, logo, address, coords, serviceTime, baseDeliveryFee, perKmRate } = req.body;
+  const { companyId, logo, address, coords, serviceTime, baseDeliveryFee, perKmRate, deliveryModuleActive } = req.body;
 
   const db = readDb();
   if (!db.companies) db.companies = [];
@@ -1685,6 +1680,7 @@ app.post("/api/pwa/businesses/config", async (req, res) => {
   }
 
   if (company) {
+    company.deliveryModuleActive = deliveryModuleActive !== undefined ? deliveryModuleActive : true;
     if (logo !== undefined) company.logo = logo;
     if (address !== undefined) company.address = address;
     if (coords !== undefined) company.coords = coords;
