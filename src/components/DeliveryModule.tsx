@@ -51,6 +51,44 @@ export default function DeliveryModule({
   const [cfgBaseFee, setCfgBaseFee] = useState(1.5);
   const [cfgPerKmRate, setCfgPerKmRate] = useState(0.75);
   const [savingCfg, setSavingCfg] = useState(false);
+  const [detectingGps, setDetectingGps] = useState(false);
+
+  // Detect exact business GPS location
+  const handleDetectBusinessGps = async () => {
+    if (!navigator.geolocation) {
+      alert("Su navegador no soporta geolocalización por GPS.");
+      return;
+    }
+
+    setDetectingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setCfgCoords(`${lat}, ${lon}`);
+
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.display_name) {
+              setCfgAddress(data.display_name);
+            }
+          }
+        } catch (err) {
+          console.warn("Error en geocodificación inversa:", err);
+        } finally {
+          setDetectingGps(false);
+          alert(`¡Ubicación exacta del negocio detectada por GPS!\nCoordenadas: ${lat}, ${lon}`);
+        }
+      },
+      (err) => {
+        setDetectingGps(false);
+        alert("No se pudo obtener la ubicación GPS. Por favor asegúrese de permitir el acceso a la ubicación en su navegador.");
+      },
+      { enableHighAccuracy: true }
+    );
+  };
 
   // Fetch live delivery orders from PWA server endpoint
   const fetchLiveDeliveries = async () => {
@@ -275,7 +313,18 @@ export default function DeliveryModule({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">📍 Dirección Completa del Local:</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-slate-700">📍 Dirección Completa del Local:</label>
+                <button
+                  type="button"
+                  onClick={handleDetectBusinessGps}
+                  disabled={detectingGps}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 border border-indigo-200 transition-colors cursor-pointer"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                  {detectingGps ? "Detectando GPS..." : "📍 Usar GPS del Dispositivo"}
+                </button>
+              </div>
               <input
                 type="text"
                 value={cfgAddress}
@@ -286,16 +335,26 @@ export default function DeliveryModule({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">🗺️ Coordenadas GPS en el Mapa (Latitud, Longitud):</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-xs font-bold text-slate-700">🗺️ Coordenadas GPS del Mapa (Latitud, Longitud):</label>
+                <button
+                  type="button"
+                  onClick={handleDetectBusinessGps}
+                  disabled={detectingGps}
+                  className="text-indigo-600 hover:text-indigo-800 text-[11px] font-bold underline cursor-pointer"
+                >
+                  Capturar GPS Actual
+                </button>
+              </div>
               <input
                 type="text"
                 value={cfgCoords}
                 onChange={(e) => setCfgCoords(e.target.value)}
                 placeholder="18.4861, -69.9312"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
               />
               <span className="text-[11px] text-slate-400 mt-1 block">
-                Ejemplo: 18.4861, -69.9312 (Utilizado por Leaflet Map para trazar las rutas de entrega y filtrar a 10 km)
+                Presione &quot;📍 Usar GPS del Dispositivo&quot; para obtener la posición física exacta de su local por GPS.
               </span>
             </div>
 
