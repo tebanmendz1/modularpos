@@ -1766,6 +1766,39 @@ app.post("/api/pwa/orders", async (req, res) => {
   });
 });
 
+// 3b. GET client orders - for PWA polling (real-time status updates)
+// Query by phone or customerName to filter client's own orders
+app.get("/api/pwa/orders/client", (req, res) => {
+  const { phone, name, limit } = req.query;
+  const db = readDb();
+  let orders: any[] = db.deliveryOrders || [];
+
+  // Filter by customer phone (preferred) or name
+  if (phone) {
+    const normalizedPhone = String(phone).replace(/\D/g, '');
+    orders = orders.filter((o: any) => {
+      const oPhone = String(o.customerPhone || '').replace(/\D/g, '');
+      return oPhone && oPhone.includes(normalizedPhone);
+    });
+  } else if (name) {
+    const nameLower = String(name).toLowerCase();
+    orders = orders.filter((o: any) =>
+      String(o.customerName || '').toLowerCase().includes(nameLower)
+    );
+  }
+
+  // Sort by most recent first
+  orders = orders.sort((a: any, b: any) =>
+    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+
+  // Limit results
+  const maxResults = Number(limit) || 20;
+  orders = orders.slice(0, maxResults);
+
+  return res.json({ success: true, count: orders.length, orders });
+});
+
 // 4. Driver API: Get assigned delivery orders
 app.get("/api/pwa/driver/orders", (req, res) => {
   const db = readDb();
