@@ -216,6 +216,48 @@ export default function App() {
     }
   }, [activeCompany]);
 
+  // Real-time synchronization between Web Browser, Pake Desktop App, and multi-device sessions
+  useEffect(() => {
+    const syncDataWithServer = async () => {
+      if (!isOnline) return;
+      try {
+        const res = await fetch(`/api/db?t=${Date.now()}`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.users)) {
+            setUsers((prev) => (JSON.stringify(prev) !== JSON.stringify(data.users) ? data.users : prev));
+            if (Array.isArray(data.branches)) {
+              setBranches((prev) => (JSON.stringify(prev) !== JSON.stringify(data.branches) ? data.branches : prev));
+            }
+            if (Array.isArray(data.warehouses)) {
+              setWarehouses((prev) => (JSON.stringify(prev) !== JSON.stringify(data.warehouses) ? data.warehouses : prev));
+            }
+            if (Array.isArray(data.products)) {
+              setProducts((prev) => (JSON.stringify(prev) !== JSON.stringify(data.products) ? data.products : prev));
+            }
+            if (Array.isArray(data.sales)) {
+              setSales((prev) => (JSON.stringify(prev) !== JSON.stringify(data.sales) ? data.sales : prev));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Real-time background sync notice:", err);
+      }
+    };
+
+    // Poll every 4 seconds for instant cross-app synchronization (Browser <-> Pake Desktop App)
+    const syncInterval = setInterval(syncDataWithServer, 4000);
+    const handleFocus = () => syncDataWithServer();
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      clearInterval(syncInterval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [isOnline]);
+
   // Helper to persist current DB state to server
   const saveDbStateToServer = async (customState?: any) => {
     if (!isOnline) return;
@@ -237,26 +279,16 @@ export default function App() {
       ...customState
     };
 
-    // Demo companies operate in isolated sandbox session; changes reset on server restart / 24h
-    // EXCEPT when customState explicitly forces server save or modifies the companies list
-    if (!customState?.forceServerSave && !customState?.companies && isDemoCompany(activeCompany?.id)) {
-      localStorage.setItem("pos_db_backup", JSON.stringify(stateToSave));
-      return;
-    }
-
     try {
       await fetch("/api/db/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(stateToSave)
       });
-      // Save local backup
       localStorage.setItem("pos_db_backup", JSON.stringify(stateToSave));
     } catch (err) {
       console.error("Error al persistir base de datos en el servidor", err);
     }
-
-
   };
 
   // Helper to add queue item offline

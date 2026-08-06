@@ -495,7 +495,7 @@ export const ROLE_ALLOWED_TABS: Record<string, string[]> = {
     "pos", "ferreteria", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
     "caja_avanzada", "contabilidad", "reportes_financieros", "manufactura", "ecommerce",
     "suscripciones", "ncf", "nomina", "delivery", "android_app", "integraciones",
-    "cotizaciones", "reportes", "config"
+    "cotizaciones", "reportes"
   ],
   Supervisor: [
     "pos", "ferreteria", "inventario", "restaurante", "clientes", "fidelizacion", "compras", "gastos",
@@ -538,7 +538,7 @@ export const PERMISSION_TO_TABS: Record<string, string[]> = {
   reportes_exportar: ["reportes"],
   admin_usuarios: ["config"],
   offline_trabajar: ["pos"],
-  aprobar_sensibles: ["pos", "config"]
+  aprobar_sensibles: ["pos"]
 };
 
 export function isTabAllowedForUser(tabId: string, user: User | null, company: Company | null): boolean {
@@ -557,21 +557,17 @@ export function isTabAllowedForUser(tabId: string, user: User | null, company: C
     }
   }
 
-  // 3. SuperAdmin or Propietario with all access
-  if (user.role === "SuperAdmin") return true;
-  if (user.role === "Propietario") return true;
-
-  // 4. Role whitelist check
-  const allowedTabsByRole = ROLE_ALLOWED_TABS[user.role];
-  if (allowedTabsByRole && allowedTabsByRole.includes(tabId)) {
+  // 3. SuperAdmin, Propietario or Master All
+  if (user.role === "SuperAdmin" || user.role === "Propietario" || user.permissions?.includes("all")) {
     return true;
   }
 
-  // 5. Granular permissions check
-  if (user.permissions?.includes("all")) {
-    return true;
+  // 4. Admin Users / Config tab requires explicit admin_usuarios permission or owner status
+  if (tabId === "config") {
+    return user.permissions?.includes("admin_usuarios") || false;
   }
 
+  // 5. Granular permissions check (if user has defined permissions)
   if (user.permissions && user.permissions.length > 0) {
     for (const permKey of user.permissions) {
       const tabs = PERMISSION_TO_TABS[permKey];
@@ -579,6 +575,12 @@ export function isTabAllowedForUser(tabId: string, user: User | null, company: C
         return true;
       }
     }
+  }
+
+  // 6. Role whitelist check
+  const allowedTabsByRole = ROLE_ALLOWED_TABS[user.role];
+  if (allowedTabsByRole && allowedTabsByRole.includes(tabId)) {
+    return true;
   }
 
   return false;
@@ -602,8 +604,7 @@ export function getAllowedTabsForUser(user: User | null, company: Company | null
 }
 
 export function isDemoCompany(companyId: string | undefined | null): boolean {
-  if (!companyId) return false;
-  return ["comp_supermercado", "comp_bistro", "comp_boutique"].includes(companyId);
+  return false;
 }
 
 export interface Quote {
