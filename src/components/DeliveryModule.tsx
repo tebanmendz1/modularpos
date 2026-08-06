@@ -106,7 +106,7 @@ export default function DeliveryModule({
   const [custName, setCustName] = useState("");
   const [custPhone, setCustPhone] = useState("");
   const [custAddress, setCustAddress] = useState("");
-  const [courierName, setCourierName] = useState("Carlos Motoconcho");
+  const [courierName, setCourierName] = useState("");
   const [orderAmount, setOrderAmount] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
 
@@ -445,7 +445,7 @@ export default function DeliveryModule({
     setCustName("");
     setCustPhone("");
     setCustAddress("");
-    setCourierName("Carlos Motoconcho");
+    setCourierName("");
     setOrderAmount("");
     setOrderNotes("");
   };
@@ -473,13 +473,13 @@ export default function DeliveryModule({
   };
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col bg-slate-100 p-6" id="delivery-viewport">
+    <div className="h-full flex flex-col bg-slate-50 p-6 font-sans">
       {/* HEADER SECTION */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-start mb-6">
         <div>
-          <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-indigo-600" />
-            Control de Envíos, Despachos & Delivery
+          <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+            <Truck className="w-6 h-6 text-indigo-600" />
+            Módulo Logístico de Delivery & Envíos
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Gestione órdenes de envío a domicilio, configure su local/mapa y dé seguimiento a repartidores en tiempo real.
@@ -656,235 +656,245 @@ export default function DeliveryModule({
             Configurar Parámetros del Negocio para la PWA & Delivery
           </h3>
           <p className="text-xs text-slate-500 mb-6">
-            Configure la ubicación exacta de su restaurante en el mapa, su logo, horario de servicio y tarifas por km. Estos datos se mostrarán directamente en la PWA de los clientes.
+            Configure la información real de su comercio para que se refleje automáticamente en la aplicación móvil PWA de los clientes.
           </p>
 
-          <form onSubmit={handleSaveDeliveryConfig} className="max-w-2xl space-y-4">
+          <div className="max-w-2xl space-y-6">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">🖼️ URL del Logo del Negocio:</label>
+              <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                🏢 Nombre de la Empresa / Comercio
+              </label>
               <input
                 type="text"
-                value={cfgLogo}
-                onChange={(e) => setCfgLogo(e.target.value)}
-                placeholder="https://..."
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
+                value={activeCompany.name}
+                disabled
+                className="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-100 text-slate-600 font-bold cursor-not-allowed"
               />
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-xs font-bold text-slate-700">📍 Dirección Completa del Local:</label>
+              <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                📍 Dirección Física del Negocio (Se refleja en PWA y geolocalización)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={cfgAddress}
+                  onChange={(e) => setCfgAddress(e.target.value)}
+                  placeholder="Ej: Av. 27 de Febrero #45, Santiago / Santo Domingo"
+                  className="flex-1 px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white font-semibold text-slate-900"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                🎯 Coordenadas GPS del Local [Latitud, Longitud]
+              </label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={cfgCoords}
+                  onChange={(e) => setCfgCoords(e.target.value)}
+                  placeholder="Ej: 19.4517, -70.6970"
+                  className="flex-1 px-3.5 py-2.5 text-xs font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white font-semibold text-slate-900"
+                />
                 <button
                   type="button"
-                  onClick={handleDetectBusinessGps}
-                  disabled={detectingGps}
-                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 border border-indigo-200 transition-colors cursor-pointer"
+                  onClick={() => setShowMapModal(true)}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <MapPin className="w-3.5 h-3.5 text-indigo-600" />
-                  {detectingGps ? "Detectando GPS..." : "📍 Usar GPS del Dispositivo"}
+                  <MapPin className="w-4 h-4" />
+                  Ubicar en Mapa
                 </button>
               </div>
-              <input
-                type="text"
-                value={cfgAddress}
-                onChange={(e) => setCfgAddress(e.target.value)}
-                placeholder="Av. Winston Churchill #102, Santo Domingo"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
-              />
             </div>
 
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-xs font-bold text-slate-700">🗺️ Coordenadas GPS del Mapa (Latitud, Longitud):</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDetectBusinessGps}
-                    disabled={detectingGps}
-                    className="text-indigo-600 hover:text-indigo-800 text-[11px] font-bold underline cursor-pointer"
-                  >
-                    Capturar GPS
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openMapPickerModal}
-                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-extrabold px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors cursor-pointer flex items-center gap-1"
-                  >
-                    <Navigation className="w-3.5 h-3.5 text-emerald-600" />
-                    🗺️ Ajustar Pin en el Mapa
-                  </button>
-                </div>
-              </div>
-              <input
-                type="text"
-                value={cfgCoords}
-                onChange={(e) => setCfgCoords(e.target.value)}
-                placeholder="18.4861, -69.9312"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-mono bg-white text-slate-900 font-semibold placeholder:text-slate-500"
-              />
-              <span className="text-[11px] text-slate-400 mt-1 block">
-                Presione &quot;📍 Usar GPS del Dispositivo&quot; o &quot;🗺️ Ajustar Pin en el Mapa&quot; para posicionar manualmente el pin exacto de su restaurante.
-              </span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">🕒 Horario de Servicio / Atención:</label>
-              <input
-                type="text"
-                value={cfgServiceTime}
-                onChange={(e) => setCfgServiceTime(e.target.value)}
-                placeholder="08:00 AM - 11:00 PM"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">💵 Tarifa Base de Envío ($):</label>
+                <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                  ⏰ Horario de Servicio
+                </label>
+                <input
+                  type="text"
+                  value={cfgServiceTime}
+                  onChange={(e) => setCfgServiceTime(e.target.value)}
+                  placeholder="08:00 AM - 11:00 PM"
+                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white font-semibold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                  💵 Tarifa Base Envío ($)
+                </label>
                 <input
                   type="number"
-                  step="0.5"
+                  step="0.1"
                   value={cfgBaseFee}
                   onChange={(e) => setCfgBaseFee(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
+                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white font-semibold text-slate-900"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">🛣️ Tarifa Adicional por Km ($/km):</label>
+                <label className="block text-xs font-extrabold text-slate-700 mb-1">
+                  📏 Tarifa por KM ($)
+                </label>
                 <input
                   type="number"
-                  step="0.25"
+                  step="0.05"
                   value={cfgPerKmRate}
                   onChange={(e) => setCfgPerKmRate(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
+                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white font-semibold text-slate-900"
                 />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={savingCfg}
-              className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              {savingCfg ? "Guardando en POS..." : "💾 Guardar Configuración de Delivery"}
-            </button>
-          </form>
+            <div className="pt-4 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={handleSaveBusinessConfig}
+                disabled={savingCfg}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                {savingCfg ? "Guardando Cambios..." : "Guardar Configuración en POS & PWA"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* LIST OF DELIVERIES (ACTIVE & HISTORY) */}
-      {activeSubTab !== "config" && (
-        <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden flex flex-col">
-          <div className="overflow-y-auto flex-1 p-1">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-500 font-extrabold uppercase text-[10px]">
-                  <th className="p-3">Código</th>
-                  <th className="p-3">Cliente / Teléfono</th>
-                  <th className="p-3">Dirección de Entrega</th>
-                  <th className="p-3">Mensajero / Repartidor</th>
-                  <th className="p-3">Monto / Notas</th>
-                  <th className="p-3">Estado actual</th>
-                  <th className="p-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {(activeSubTab === "active" ? activeDeliveries : historyDeliveries).map((del) => (
-                  <tr key={del.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-3 font-mono font-bold text-indigo-600">{del.id}</td>
-                    <td className="p-3">
-                      <div className="font-bold text-slate-900">{del.customerName}</div>
-                      <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                        <Phone className="w-3 h-3" />
-                        {del.phone}
-                      </div>
-                    </td>
-                    <td className="p-3 max-w-xs truncate text-slate-700" title={del.address}>
-                      {del.address}
-                    </td>
-                    <td className="p-3 font-medium text-slate-800 flex items-center gap-1.5 mt-2">
-                      <User className="w-3.5 h-3.5 text-slate-400" />
-                      {del.courierName}
-                    </td>
-                    <td className="p-3">
-                      <div className="font-bold text-slate-900">${del.amount.toFixed(2)}</div>
-                      {del.notes && <div className="text-[10px] text-slate-500 truncate max-w-xs">{del.notes}</div>}
-                    </td>
-                    <td className="p-3">
-                      {(del.status === "assigned" || del.status === "preparing") && (
-                        <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                          📋 Confirmado
-                        </span>
-                      )}
-                      {(del.status === "driver_assigned" || del.status === "ready") && (
-                        <span className="bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                          🛵 Delivery Asignado ({del.courierName || 'Asignado'})
-                        </span>
-                      )}
-                      {(del.status === "dispatched" || del.status === "picked_up" || del.status === "shipping" || del.status === "in_transit") && (
-                        <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                          <Navigation className="w-3 h-3 animate-bounce" /> Delivery en Camino
-                        </span>
-                      )}
-                      {del.status === "delivered" && (
-                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Entregado
-                        </span>
-                      )}
-                      {(del.status === "cancelled" || del.status === "canceled") && (
-                        <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg">
-                          Cancelado
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-right">
-                      <div className="flex justify-end gap-1 flex-wrap">
-                        {/* Assign driver button */}
-                        {del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
-                          <button
-                            onClick={() => { setAssigningOrderId(del.id); setSelectedDriver(del.courierName !== "Sin asignar" ? del.courierName : AVAILABLE_DRIVERS[0].name); }}
-                            className="bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
-                          >
-                            <Truck className="w-3 h-3" /> {del.courierName && del.courierName !== "Sin asignar" ? "Reasignar" : "Asignar Delivery"}
-                          </button>
-                        )}
+      {/* TABLE / LIST FOR ACTIVE OR HISTORY DELIVERIES */}
+      {(activeSubTab === "active" || activeSubTab === "history") && (
+        <div className="flex-1 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs flex flex-col">
+          <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+              {activeSubTab === "active" ? "Listado de Órdenes de Envío en Curso" : "Historial de Envíos Entregados"}
+            </h3>
+            <span className="text-[11px] text-slate-500 font-semibold">
+              Total: {(activeSubTab === "active" ? activeDeliveries : historyDeliveries).length} órdenes
+            </span>
+          </div>
 
-                        {/* Despachado button */}
-                        {del.status !== "dispatched" && del.status !== "picked_up" && del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
-                          <button
-                            onClick={() => handleUpdateStatusApi(del.id, "dispatched")}
-                            className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
-                          >
-                            🚀 Despachado
-                          </button>
-                        )}
-
-                        {/* Entregado button */}
-                        {(del.status === "dispatched" || del.status === "picked_up" || del.status === "driver_assigned" || del.status === "ready") && (
-                          <button
-                            onClick={() => handleUpdateStatusApi(del.id, "delivered")}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
-                          >
-                            ✓ Entregado
-                          </button>
-                        )}
-
-                        {/* Cancel button */}
-                        {del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
-                          <button
-                            onClick={() => handleUpdateStatusApi(del.id, "canceled")}
-                            className="bg-red-100 hover:bg-red-200 text-red-700 text-[11px] font-bold px-2 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          <div className="flex-1 overflow-y-auto">
+            {(activeSubTab === "active" ? activeDeliveries : historyDeliveries).length === 0 ? (
+              <div className="text-center py-16 text-slate-400">
+                <Truck className="w-12 h-12 mx-auto mb-2 opacity-40" />
+                <p className="text-xs font-bold text-slate-600">No hay órdenes {activeSubTab === "active" ? "activas" : "en el historial"}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Las compras realizadas en la PWA aparecerán automáticamente aquí.</p>
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-500 font-extrabold uppercase text-[10px]">
+                    <th className="p-3">Código</th>
+                    <th className="p-3">Cliente / Teléfono</th>
+                    <th className="p-3">Dirección de Entrega</th>
+                    <th className="p-3">Mensajero / Repartidor</th>
+                    <th className="p-3">Monto / Notas</th>
+                    <th className="p-3">Estado actual</th>
+                    <th className="p-3 text-right">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(activeSubTab === "active" ? activeDeliveries : historyDeliveries).map((del) => (
+                    <tr key={del.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3 font-mono font-bold text-indigo-600">{del.id}</td>
+                      <td className="p-3">
+                        <div className="font-bold text-slate-900">{del.customerName}</div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          {del.phone}
+                        </div>
+                      </td>
+                      <td className="p-3 max-w-xs truncate text-slate-700" title={del.address}>
+                        {del.address}
+                      </td>
+                      <td className="p-3 font-medium text-slate-800 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        {del.courierName || "Sin asignar"}
+                      </td>
+                      <td className="p-3">
+                        <div className="font-bold text-slate-900">${del.amount.toFixed(2)}</div>
+                        {del.notes && <div className="text-[10px] text-slate-500 truncate max-w-xs">{del.notes}</div>}
+                      </td>
+                      <td className="p-3">
+                        {(del.status === "assigned" || del.status === "preparing") && (
+                          <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                            📋 Confirmado
+                          </span>
+                        )}
+                        {(del.status === "driver_assigned" || del.status === "ready") && (
+                          <span className="bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                            🛵 Delivery Asignado ({del.courierName || 'Asignado'})
+                          </span>
+                        )}
+                        {(del.status === "dispatched" || del.status === "picked_up" || del.status === "shipping" || del.status === "in_transit") && (
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                            <Navigation className="w-3 h-3 animate-bounce" /> Delivery en Camino
+                          </span>
+                        )}
+                        {del.status === "delivered" && (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Entregado
+                          </span>
+                        )}
+                        {(del.status === "cancelled" || del.status === "canceled") && (
+                          <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg">
+                            Cancelado
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="flex justify-end gap-1 flex-wrap">
+                          {/* Assign driver button */}
+                          {del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
+                            <button
+                              onClick={() => { setAssigningOrderId(del.id); setSelectedDriver(del.courierName && del.courierName !== "Sin asignar" ? del.courierName : (drivers.length > 0 ? drivers[0].name : "")); }}
+                              className="bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
+                            >
+                              <Truck className="w-3 h-3" /> {del.courierName && del.courierName !== "Sin asignar" ? "Reasignar" : "Asignar Delivery"}
+                            </button>
+                          )}
+
+                          {/* Despachado button */}
+                          {del.status !== "dispatched" && del.status !== "picked_up" && del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
+                            <button
+                              onClick={() => handleUpdateStatusApi(del.id, "dispatched")}
+                              className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
+                            >
+                              🚀 Despachado
+                            </button>
+                          )}
+
+                          {/* Entregado button */}
+                          {(del.status === "dispatched" || del.status === "picked_up" || del.status === "driver_assigned" || del.status === "ready") && (
+                            <button
+                              onClick={() => handleUpdateStatusApi(del.id, "delivered")}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
+                            >
+                              ✓ Entregado
+                            </button>
+                          )}
+
+                          {/* Cancel button */}
+                          {del.status !== "delivered" && del.status !== "cancelled" && del.status !== "canceled" && (
+                            <button
+                              onClick={() => handleUpdateStatusApi(del.id, "canceled")}
+                              className="bg-red-100 hover:bg-red-200 text-red-700 text-[11px] font-bold px-2 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}

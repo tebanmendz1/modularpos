@@ -1770,7 +1770,11 @@ app.post("/api/pwa/orders", async (req, res) => {
     customerCoords: customerCoords || [18.4720, -69.9150],
     restaurantName: resolvedRestaurantName,
     restaurantCoords: resolvedRestaurantCoords,
-    status: "assigned",
+    status: "preparing",
+    driverName: "",
+    driverPhone: "",
+    courierName: "",
+    courierPhone: "",
     items: items || [],
     total: Number(total || 0),
     paymentMethod: paymentMethod || "Efectivo / POS Mobile",
@@ -1987,6 +1991,17 @@ app.post("/api/pwa/orders/:orderId/assign-driver", async (req, res) => {
 
   order.driverName = driverName || order.driverName || "";
   order.driverPhone = driverPhone || order.driverPhone || "";
+
+  // Auto-populate driverPhone from registered drivers if missing
+  if (!order.driverPhone && order.driverName) {
+    const foundDrv = db.deliveryDrivers?.find(
+      (d: any) => d.name === order.driverName || d.id === order.driverName
+    );
+    if (foundDrv && foundDrv.phone) {
+      order.driverPhone = foundDrv.phone;
+    }
+  }
+
   order.courierName = order.driverName;
   order.courierPhone = order.driverPhone;
   order.status = status || "driver_assigned";
@@ -2112,7 +2127,7 @@ app.post("/api/pwa/auth/login", (req, res) => {
       return res.json({
         success: true,
         role: "driver",
-        user: { id: "drv_01", name: "Carlos R. (Motorista POS)", email: normalizedEmail, phone: "+1 809-555-0199" },
+        user: { id: "drv_01", name: "Repartidor POS", email: normalizedEmail, phone: "" },
         token: "tok_driver_01",
       });
     }
