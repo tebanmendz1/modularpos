@@ -508,6 +508,17 @@ export default function DeliveryModule({
           Historial Entregados ({historyDeliveries.length})
         </button>
         <button
+          onClick={() => setActiveSubTab("drivers")}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+            activeSubTab === "drivers"
+              ? "border-indigo-600 text-indigo-700 font-extrabold"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Truck className="w-4 h-4 text-violet-600" />
+          🛵 Repartidores & Accesos PWA ({drivers.length})
+        </button>
+        <button
           onClick={() => setActiveSubTab("config")}
           className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
             activeSubTab === "config"
@@ -519,6 +530,105 @@ export default function DeliveryModule({
           Configuración del Delivery & Negocio
         </button>
       </div>
+
+      {/* DRIVERS SUBTAB: REGISTRO Y ACCESOS PWA */}
+      {activeSubTab === "drivers" && (
+        <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs overflow-y-auto">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <Truck className="w-5 h-5 text-violet-600" />
+                Repartidores Registrados & Accesos a la PWA
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Registre a sus mensajeros y asígneles accesos para ingresar a la App PWA del Delivery.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAddDriverModal(true)}
+              className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Registrar Nuevo Repartidor
+            </button>
+          </div>
+
+          <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 mb-6 text-xs text-violet-900 space-y-1.5">
+            <div className="font-extrabold flex items-center gap-1.5 text-violet-950 text-sm">
+              📱 ¿Cómo le da acceso a su repartidor a la App PWA?
+            </div>
+            <div>1. Presione <b>&quot;Registrar Nuevo Repartidor&quot;</b> e ingrese su Nombre, Teléfono, Usuario / Correo y Contraseña.</div>
+            <div>2. Su repartidor debe ingresar desde su celular a la PWA en <b>/sign-in</b> o <b>/driver</b>.</div>
+            <div>3. Selecciona la opción <b>&quot;Ingresar como Repartidor&quot;</b> e ingresa sus credenciales creadas aquí.</div>
+            <div>4. ¡Listo! Al asignarle un pedido en este panel, le aparecerá en tiempo real en su celular.</div>
+          </div>
+
+          {drivers.length === 0 ? (
+            <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-200">
+              <Truck className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+              <div className="text-sm font-bold text-slate-700">No hay repartidores registrados</div>
+              <p className="text-xs text-slate-500 mt-1 mb-4">Agregue repartidores para asignarle pedidos en el sistema.</p>
+              <button
+                onClick={() => setShowAddDriverModal(true)}
+                className="bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-4 py-2 rounded-xl"
+              >
+                + Registrar Primer Repartidor
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-hidden border border-slate-200 rounded-2xl">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                    <th className="p-3">Repartidor</th>
+                    <th className="p-3">Teléfono / WhatsApp</th>
+                    <th className="p-3">Vehículo</th>
+                    <th className="p-3">Estado PWA</th>
+                    <th className="p-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {drivers.map((drv) => (
+                    <tr key={drv.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-bold">
+                          🛵
+                        </div>
+                        {drv.name}
+                      </td>
+                      <td className="p-3 text-slate-700 font-medium">
+                        {drv.phone ? `📞 ${drv.phone}` : "Sin teléfono"}
+                      </td>
+                      <td className="p-3 text-slate-700 font-semibold">
+                        {drv.vehicle || "Motocicleta"}
+                      </td>
+                      <td className="p-3">
+                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg">
+                          ✓ Acceso Activo PWA
+                        </span>
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={async () => {
+                            if (confirm(`¿Eliminar al repartidor ${drv.name}?`)) {
+                              await fetch(`/api/pwa/drivers/${drv.id}`, { method: "DELETE" });
+                              fetchDrivers();
+                              onAddAudit("Repartidores", `Repartidor eliminado: ${drv.name}`);
+                            }
+                          }}
+                          className="bg-red-50 hover:bg-red-100 text-red-600 text-[11px] font-bold px-2.5 py-1.5 rounded-lg border border-red-200 transition-colors cursor-pointer"
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* CONFIG SUBTAB FOR BUSINESS OWNER */}
       {activeSubTab === "config" && (

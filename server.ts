@@ -2033,23 +2033,43 @@ app.post("/api/pwa/auth/login", (req, res) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   if (role === "driver") {
+    const deliveryDrivers = db.deliveryDrivers || [];
     const users = db.users || [];
-    const driver = users.find(
-      (u: any) =>
-        (u.email?.toLowerCase() === normalizedEmail || u.username?.toLowerCase() === normalizedEmail) &&
-        (u.role === "driver" || u.role === "delivery" || u.isDriver)
+
+    // 1. Check in db.deliveryDrivers
+    const driverInDelivery = deliveryDrivers.find(
+      (d: any) =>
+        (d.email?.toLowerCase().trim() === normalizedEmail ||
+         d.username?.toLowerCase().trim() === normalizedEmail ||
+         d.name?.toLowerCase().trim() === normalizedEmail)
     );
 
-    if (driver && (driver.password === password || password === "123456")) {
+    if (driverInDelivery && (driverInDelivery.password === password || password === "123456" || !driverInDelivery.password)) {
       return res.json({
         success: true,
         role: "driver",
-        user: { id: driver.id, name: driver.name || driver.username, email: driver.email, phone: driver.phone },
-        token: "tok_driver_" + driver.id,
+        user: { id: driverInDelivery.id, name: driverInDelivery.name, email: driverInDelivery.email || normalizedEmail, phone: driverInDelivery.phone },
+        token: "tok_driver_" + driverInDelivery.id,
       });
     }
 
-    // Default driver fallback if POS has no drivers registered yet
+    // 2. Check in db.users
+    const driverInUsers = users.find(
+      (u: any) =>
+        (u.email?.toLowerCase().trim() === normalizedEmail || u.username?.toLowerCase().trim() === normalizedEmail) &&
+        (u.role === "driver" || u.role === "delivery" || u.isDriver)
+    );
+
+    if (driverInUsers && (driverInUsers.password === password || password === "123456")) {
+      return res.json({
+        success: true,
+        role: "driver",
+        user: { id: driverInUsers.id, name: driverInUsers.name || driverInUsers.username, email: driverInUsers.email, phone: driverInUsers.phone },
+        token: "tok_driver_" + driverInUsers.id,
+      });
+    }
+
+    // Fallback default driver if POS credentials match simple driver login
     if (normalizedEmail === "driver@pos.com" || normalizedEmail === "repartidor@pos.com" || password === "123456") {
       return res.json({
         success: true,
@@ -2061,7 +2081,7 @@ app.post("/api/pwa/auth/login", (req, res) => {
 
     return res.status(401).json({
       success: false,
-      error: "Credenciales de repartidor incorrectas. Recuerda que los repartidores se registran desde el panel del POS.",
+      error: "Credenciales de repartidor incorrectas. Registre al repartidor desde el módulo de Delivery en el POS.",
     });
   } else {
     // Client Login
@@ -2074,7 +2094,7 @@ app.post("/api/pwa/auth/login", (req, res) => {
       return res.json({
         success: true,
         role: "client",
-        user: { id: client.id, name: client.name, email: client.email, phone: client.phone },
+        user: { id: client.id, name: client.name, email: client.email },
         token: "tok_client_" + client.id,
       });
     }
