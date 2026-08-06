@@ -342,8 +342,10 @@ export default function DeliveryModule({
       });
 
       if (res.ok) {
+        if (activeCompany) (activeCompany as any).address = cfgAddress;
+        if (activeBranch) (activeBranch as any).address = cfgAddress;
         alert("¡Configuración de Delivery guardada exitosamente en el POS y sincronizada con la PWA!");
-        onAddAudit("Configuración Delivery", `Actualizados parámetros de delivery para ${activeCompany.name}`);
+        onAddAudit("Configuración Delivery", `Actualizados parámetros de delivery y dirección para ${activeCompany.name}`);
       } else {
         alert("Error al guardar la configuración.");
       }

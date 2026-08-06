@@ -1681,17 +1681,24 @@ app.post("/api/pwa/businesses/config", async (req, res) => {
   if (company) {
     company.deliveryModuleActive = deliveryModuleActive !== undefined ? deliveryModuleActive : true;
     if (logo !== undefined) company.logo = logo;
-    if (address !== undefined) company.address = address;
+    if (address !== undefined) {
+      company.address = address;
+      company.registeredAddress = address;
+      company.fiscalAddress = address;
+      company.mainAddress = address;
+    }
     if (coords !== undefined) company.coords = coords;
     if (serviceTime !== undefined) company.serviceTime = serviceTime;
     if (baseDeliveryFee !== undefined) company.baseDeliveryFee = Number(baseDeliveryFee);
     if (perKmRate !== undefined) company.perKmRate = Number(perKmRate);
 
-    // Also update address in db.branches if matching
+    // Also update address in all branches of this company so registration address changes everywhere
     if (db.branches && address) {
       db.branches.forEach((b: any) => {
         if (b.companyId === company.id || b.company_id === company.id) {
           b.address = address;
+          b.registeredAddress = address;
+          if (coords) b.coords = coords;
         }
       });
     }
