@@ -93,16 +93,29 @@ export default function CashAdvanceModule({
   activeCompany,
   currentUser,
   activeBranch,
-  cashSessions,
-  sales,
+  branches = [],
+  cashSessions = [],
+  sales = [],
   onOpenCashSession,
   onCloseCashSession,
   onCashInSession,
   onAddAudit
 }: CashAdvanceModuleProps) {
+  if (!activeCompany || !activeBranch) {
+    return (
+      <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-2xl m-4 space-y-2">
+        <div className="text-slate-700 font-bold text-sm">Cargando información de sucursal y caja...</div>
+        <p className="text-slate-500 text-xs">Por favor, verifique que una sucursal activa esté seleccionada en el sistema.</p>
+      </div>
+    );
+  }
+
+  const compId = activeCompany.id;
+  const branchId = activeBranch.id;
+
   // Cash sessions for active company
-  const companySessions = cashSessions.filter(cs => cs.companyId === activeCompany.id);
-  const activeSession = companySessions.find(cs => cs.branchId === activeBranch.id && cs.status === "open");
+  const companySessions = (cashSessions || []).filter(cs => cs.companyId === compId);
+  const activeSession = companySessions.find(cs => cs.branchId === branchId && cs.status === "open");
 
   // Local state for treasury operations
   const [initialFund, setInitialFund] = useState("5000");
@@ -139,7 +152,7 @@ export default function CashAdvanceModule({
 
   // Arqueo History (Reports database in local storage)
   const [arqueoHistory, setArqueoHistory] = useState<ArqueoReport[]>(() => {
-    const saved = localStorage.getItem(`pos_arqueo_reports_${activeCompany.id}`);
+    const saved = localStorage.getItem(`pos_arqueo_reports_${compId}`);
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -151,7 +164,7 @@ export default function CashAdvanceModule({
   const [countedCash, setCountedCash] = useState("");
   const [reconciliationJustification, setReconciliationJustification] = useState("");
   const [reconciliationHistory, setReconciliationHistory] = useState<any[]>(() => {
-    const saved = localStorage.getItem(`pos_reconciliations_${activeCompany.id}`);
+    const saved = localStorage.getItem(`pos_reconciliations_${compId}`);
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -160,25 +173,25 @@ export default function CashAdvanceModule({
   const [transferAmount, setTransferAmount] = useState("");
   const [targetBranchId, setTargetBranchId] = useState("");
   const [transfers, setTransfers] = useState<CashTransfer[]>(() => {
-    const saved = localStorage.getItem(`pos_transfers_${activeCompany.id}`);
+    const saved = localStorage.getItem(`pos_transfers_${compId}`);
     return saved ? JSON.parse(saved) : [];
   });
 
   // General movements
   const [movements, setMovements] = useState<CashFlowMovement[]>(() => {
-    const saved = localStorage.getItem(`pos_movements_${activeCompany.id}`);
+    const saved = localStorage.getItem(`pos_movements_${compId}`);
     return saved ? JSON.parse(saved) : [];
   });
 
   // Destination branches available for transfer (belonging to active company, excluding current active branch)
   const otherBranches = (branches || []).filter(
-    (b) => b.companyId === activeCompany.id && b.id !== activeBranch.id
+    (b) => b.companyId === compId && b.id !== branchId
   );
 
   // Calculate stats for current active session sales
-  const sessionSales = sales.filter(s => 
-    s.companyId === activeCompany.id &&
-    s.branchId === activeBranch.id &&
+  const sessionSales = (sales || []).filter(s => 
+    s.companyId === compId &&
+    s.branchId === branchId &&
     s.status === "completed" &&
     activeSession &&
     new Date(s.date) >= new Date(activeSession.openDate)
@@ -375,10 +388,10 @@ export default function CashAdvanceModule({
 
     const newSession: CashSession = {
       id: "cs_" + Math.random().toString(36).slice(2, 9),
-      companyId: activeCompany.id,
-      branchId: activeBranch.id,
-      userId: currentUser.id,
-      userName: currentUser.name,
+      companyId: compId,
+      branchId: branchId,
+      userId: currentUser?.id || "usr_cajero",
+      userName: currentUser?.name || "Cajero",
       openDate: new Date().toISOString(),
       initialFund: fund,
       cashIn: 0,

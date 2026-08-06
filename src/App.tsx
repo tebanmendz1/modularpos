@@ -1229,7 +1229,7 @@ export default function App() {
           )}
 
           {/* TAB: ADVANCED TREASURY & FUND RECONCILIATIONS */}
-          {activeTab === "caja_avanzada" && (
+          {activeTab === "caja_avanzada" && activeCompany && activeBranch && (
             <CashAdvanceModule
               activeCompany={activeCompany}
               currentUser={currentUser}
