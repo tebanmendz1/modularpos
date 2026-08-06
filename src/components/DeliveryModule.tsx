@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { MapPin, Plus, CheckCircle, Navigation, Clock, User, Phone, Check, RefreshCw, Layers } from "lucide-react";
+import { MapPin, Plus, CheckCircle, Navigation, Clock, User, Phone, Check, RefreshCw, Layers, Settings } from "lucide-react";
 import { Company, Branch } from "../types";
 
 interface DeliveryOrder {
@@ -25,7 +25,7 @@ export default function DeliveryModule({
   activeBranch,
   onAddAudit
 }: DeliveryModuleProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"active" | "history">("active");
+  const [activeSubTab, setActiveSubTab] = useState<"active" | "history" | "config">("active");
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
 
   // Delivery order list state - seeded with demo orders
@@ -42,6 +42,15 @@ export default function DeliveryModule({
   const [courierName, setCourierName] = useState("Carlos Motoconcho");
   const [orderAmount, setOrderAmount] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
+
+  // Business Config states for Owner/Admin
+  const [cfgLogo, setCfgLogo] = useState((activeCompany as any).logo || "");
+  const [cfgAddress, setCfgAddress] = useState((activeCompany as any).address || activeBranch.address || "Av. Winston Churchill #102, Santo Domingo");
+  const [cfgCoords, setCfgCoords] = useState("18.4861, -69.9312");
+  const [cfgServiceTime, setCfgServiceTime] = useState("08:00 AM - 11:00 PM");
+  const [cfgBaseFee, setCfgBaseFee] = useState(1.5);
+  const [cfgPerKmRate, setCfgPerKmRate] = useState(0.75);
+  const [savingCfg, setSavingCfg] = useState(false);
 
   // Fetch live delivery orders from PWA server endpoint
   const fetchLiveDeliveries = async () => {
@@ -83,6 +92,43 @@ export default function DeliveryModule({
   const activeDeliveries = deliveries.filter((d) => d.status !== "delivered" && d.status !== "cancelled");
   const historyDeliveries = deliveries.filter((d) => d.status === "delivered" || d.status === "cancelled");
 
+  // Save Delivery Config to POS DB
+  const handleSaveDeliveryConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingCfg(true);
+    try {
+      const parts = cfgCoords.split(",").map((p) => parseFloat(p.trim()));
+      const coords: [number, number] = parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])
+        ? [parts[0], parts[1]]
+        : [18.4861, -69.9312];
+
+      const res = await fetch("/api/pwa/businesses/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: activeCompany.id,
+          logo: cfgLogo,
+          address: cfgAddress,
+          coords,
+          serviceTime: cfgServiceTime,
+          baseDeliveryFee: Number(cfgBaseFee),
+          perKmRate: Number(cfgPerKmRate)
+        })
+      });
+
+      if (res.ok) {
+        alert("¡Configuración de Delivery guardada exitosamente en el POS y sincronizada con la PWA!");
+        onAddAudit("Configuración Delivery", `Actualizados parámetros de delivery para ${activeCompany.name}`);
+      } else {
+        alert("Error al guardar la configuración.");
+      }
+    } catch (err) {
+      alert("Error al conectar con el servidor POS.");
+    } finally {
+      setSavingCfg(false);
+    }
+  };
+
   // Handle new delivery creation
   const handleCreateDelivery = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,7 +158,6 @@ export default function DeliveryModule({
     setDeliveries([newDel, ...deliveries]);
     onAddAudit("Despacho Delivery", `Se ordenó envío #${newDel.id} para ${newDel.customerName} vía ${newDel.courierName}`);
 
-    // Reset Form
     setShowAddOrderModal(false);
     setCustName("");
     setCustPhone("");
@@ -154,7 +199,7 @@ export default function DeliveryModule({
             Control de Envíos, Despachos & Delivery
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Gestione órdenes de envío a domicilio, asigne choferes o mensajeros, y dé seguimiento a los pagos pendientes en tiempo real.
+            Gestione órdenes de envío a domicilio, configure su local/mapa y dé seguimiento a repartidores en tiempo real.
           </p>
         </div>
         <div className="flex gap-2">
@@ -164,7 +209,7 @@ export default function DeliveryModule({
             id="btn-add-delivery"
           >
             <Plus className="w-4 h-4" />
-            Nuevo Envío
+            Nuevo Envío Manual
           </button>
         </div>
       </div>
@@ -193,215 +238,298 @@ export default function DeliveryModule({
           <CheckCircle className="w-4 h-4" />
           Historial Entregados ({historyDeliveries.length})
         </button>
+        <button
+          onClick={() => setActiveSubTab("config")}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+            activeSubTab === "config"
+              ? "border-indigo-600 text-indigo-700 font-extrabold"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          Configuración del Delivery & Negocio
+        </button>
       </div>
 
-      {/* LIST OF DELIVERIES */}
-      <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden flex flex-col">
-        <div className="overflow-y-auto flex-1 p-1">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-150 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 z-10">
-              <tr>
-                <th className="p-3">Código</th>
-                <th className="p-3">Cliente / Teléfono</th>
-                <th className="p-3">Dirección de Destino</th>
-                <th className="p-3">Repartidor</th>
-                <th className="p-3 text-right">Monto</th>
-                <th className="p-3 text-center">Hora Pedido</th>
-                <th className="p-3 text-center">Estado</th>
-                <th className="p-3 text-center">Flujo de Entrega</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-sans">
-              {(activeSubTab === "active" ? activeDeliveries : historyDeliveries).length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400">
-                    No se encontraron órdenes de delivery en esta sección.
-                  </td>
-                </tr>
-              ) : (
-                (activeSubTab === "active" ? activeDeliveries : historyDeliveries).map((d) => {
-                  const minutesPassed = Math.floor((Date.now() - new Date(d.createdTime).getTime()) / 60000);
-                  return (
-                    <tr key={d.id} className="hover:bg-slate-50/50">
-                      <td className="p-3 font-mono text-[11px] text-slate-500">#{d.id}</td>
-                      <td className="p-3">
-                        <div className="font-bold text-slate-800 flex items-center gap-1">
-                          <User className="w-3 h-3 text-slate-400" />
-                          {d.customerName}
-                        </div>
-                        <div className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
-                          <Phone className="w-2.5 h-2.5" />
-                          {d.phone}
-                        </div>
-                      </td>
-                      <td className="p-3 text-slate-600 font-medium max-w-xs truncate" title={d.address}>
-                        {d.address}
-                        {d.notes && (
-                          <div className="text-[9.5px] italic text-amber-600 mt-0.5">Nota: {d.notes}</div>
-                        )}
-                      </td>
-                      <td className="p-3 font-bold text-slate-700">{d.courierName}</td>
-                      <td className="p-3 text-right font-mono font-bold text-slate-900">
-                        {activeCompany.settings.currency} {d.amount.toFixed(2)}
-                      </td>
-                      <td className="p-3 text-center font-mono text-[11px] text-slate-500">
-                        <div className="flex justify-center items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" />
-                          {minutesPassed < 60 ? `${minutesPassed} min` : `${Math.floor(minutesPassed / 60)} hrs`}
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                          d.status === "delivered"
-                            ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                            : d.status === "dispatched"
-                            ? "bg-sky-50 text-sky-600 border border-sky-200 animate-pulse"
-                            : d.status === "cancelled"
-                            ? "bg-red-50 text-red-500 border border-red-200"
-                            : "bg-amber-50 text-amber-600 border border-amber-200"
-                        }`}>
-                          {d.status === "delivered" ? "Entregado" : d.status === "dispatched" ? "En Camino" : d.status === "cancelled" ? "Cancelado" : "En Cocina"}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {d.status === "preparing" && (
-                            <button
-                              onClick={() => handleUpdateStatus(d.id, "dispatched")}
-                              className="px-2.5 py-1 bg-sky-50 text-sky-600 hover:bg-sky-100 border border-sky-100 rounded-lg text-[9px] font-black cursor-pointer transition-colors"
-                            >
-                              Despachar Repartidor
-                            </button>
-                          )}
-                          {d.status === "dispatched" && (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleUpdateStatus(d.id, "delivered")}
-                                className="px-2 py-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-150 rounded-lg text-[9px] font-black cursor-pointer flex items-center gap-1 transition-colors"
-                              >
-                                <Check className="w-3 h-3" />
-                                Entregado (Cobrado)
-                              </button>
-                              <button
-                                onClick={() => handleUpdateStatus(d.id, "cancelled")}
-                                className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 border border-red-150 rounded-lg text-[9px] font-black cursor-pointer transition-colors"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          )}
-                          {d.status === "delivered" && (
-                            <div className="flex items-center justify-center text-[10px] text-emerald-600 font-bold gap-1">
-                              <CheckCircle className="w-3.5 h-3.5" /> Liquidado
-                            </div>
-                          )}
-                          {d.status === "cancelled" && (
-                            <span className="text-[10px] text-slate-400 font-medium">Orden Anulada</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* CONFIG SUBTAB FOR BUSINESS OWNER */}
+      {activeSubTab === "config" && (
+        <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs overflow-y-auto">
+          <h3 className="text-base font-extrabold text-slate-900 mb-2 flex items-center gap-2">
+            <Settings className="w-5 h-5 text-indigo-600" />
+            Configurar Parámetros del Negocio para la PWA & Delivery
+          </h3>
+          <p className="text-xs text-slate-500 mb-6">
+            Configure la ubicación exacta de su restaurante en el mapa, su logo, horario de servicio y tarifas por km. Estos datos se mostrarán directamente en la PWA de los clientes.
+          </p>
 
-      {/* MODAL: ADD DELIVERY */}
-      {showAddOrderModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-md w-full p-6 text-slate-800">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-indigo-600" />
-                Registrar Envío / Delivery
-              </h3>
-              <button onClick={() => setShowAddOrderModal(false)} className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer">&times;</button>
+          <form onSubmit={handleSaveDeliveryConfig} className="max-w-2xl space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">🖼️ URL del Logo del Negocio:</label>
+              <input
+                type="text"
+                value={cfgLogo}
+                onChange={(e) => setCfgLogo(e.target.value)}
+                placeholder="https://..."
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
             </div>
 
-            <form onSubmit={handleCreateDelivery} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Nombre Cliente *</label>
-                  <input
-                    type="text"
-                    value={custName}
-                    onChange={(e) => setCustName(e.target.value)}
-                    placeholder="Ej. Anabel Peña..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Teléfono Cliente</label>
-                  <input
-                    type="text"
-                    value={custPhone}
-                    onChange={(e) => setCustPhone(e.target.value)}
-                    placeholder="809-555-1234..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden"
-                  />
-                </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">📍 Dirección Completa del Local:</label>
+              <input
+                type="text"
+                value={cfgAddress}
+                onChange={(e) => setCfgAddress(e.target.value)}
+                placeholder="Av. Winston Churchill #102, Santo Domingo"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">🗺️ Coordenadas GPS en el Mapa (Latitud, Longitud):</label>
+              <input
+                type="text"
+                value={cfgCoords}
+                onChange={(e) => setCfgCoords(e.target.value)}
+                placeholder="18.4861, -69.9312"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+              <span className="text-[11px] text-slate-400 mt-1 block">
+                Ejemplo: 18.4861, -69.9312 (Utilizado por Leaflet Map para trazar las rutas de entrega y filtrar a 10 km)
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">🕒 Horario de Servicio / Atención:</label>
+              <input
+                type="text"
+                value={cfgServiceTime}
+                onChange={(e) => setCfgServiceTime(e.target.value)}
+                placeholder="08:00 AM - 11:00 PM"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">💵 Tarifa Base de Envío ($):</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={cfgBaseFee}
+                  onChange={(e) => setCfgBaseFee(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Dirección de Entrega *</label>
-                <textarea
-                  value={custAddress}
-                  onChange={(e) => setCustAddress(e.target.value)}
-                  placeholder="Escriba calle, número, sector o referencias de torre..."
-                  rows={2}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden"
+                <label className="block text-xs font-bold text-slate-700 mb-1">🛣️ Tarifa Adicional por Km ($/km):</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  value={cfgPerKmRate}
+                  onChange={(e) => setCfgPerKmRate(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingCfg}
+              className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              {savingCfg ? "Guardando en POS..." : "💾 Guardar Configuración de Delivery"}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* LIST OF DELIVERIES (ACTIVE & HISTORY) */}
+      {activeSubTab !== "config" && (
+        <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden flex flex-col">
+          <div className="overflow-y-auto flex-1 p-1">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-500 font-extrabold uppercase text-[10px]">
+                  <th className="p-3">Código</th>
+                  <th className="p-3">Cliente / Teléfono</th>
+                  <th className="p-3">Dirección de Entrega</th>
+                  <th className="p-3">Mensajero / Repartidor</th>
+                  <th className="p-3">Monto / Notas</th>
+                  <th className="p-3">Estado actual</th>
+                  <th className="p-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(activeSubTab === "active" ? activeDeliveries : historyDeliveries).map((del) => (
+                  <tr key={del.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="p-3 font-mono font-bold text-indigo-600">{del.id}</td>
+                    <td className="p-3">
+                      <div className="font-bold text-slate-900">{del.customerName}</div>
+                      <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                        <Phone className="w-3 h-3" />
+                        {del.phone}
+                      </div>
+                    </td>
+                    <td className="p-3 max-w-xs truncate text-slate-700" title={del.address}>
+                      {del.address}
+                    </td>
+                    <td className="p-3 font-medium text-slate-800 flex items-center gap-1.5 mt-2">
+                      <User className="w-3.5 h-3.5 text-slate-400" />
+                      {del.courierName}
+                    </td>
+                    <td className="p-3">
+                      <div className="font-bold text-slate-900">${del.amount.toFixed(2)}</div>
+                      {del.notes && <div className="text-[10px] text-slate-500 truncate max-w-xs">{del.notes}</div>}
+                    </td>
+                    <td className="p-3">
+                      {del.status === "preparing" && (
+                        <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> En Preparación
+                        </span>
+                      )}
+                      {del.status === "dispatched" && (
+                        <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                          <Navigation className="w-3 h-3 animate-bounce" /> En Camino / Despachado
+                        </span>
+                      )}
+                      {del.status === "delivered" && (
+                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg inline-flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Entregado
+                        </span>
+                      )}
+                      {del.status === "cancelled" && (
+                        <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg">
+                          Cancelado
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        {del.status === "preparing" && (
+                          <button
+                            onClick={() => handleUpdateStatus(del.id, "dispatched")}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                          >
+                            Despachar
+                          </button>
+                        )}
+                        {del.status === "dispatched" && (
+                          <button
+                            onClick={() => handleUpdateStatus(del.id, "delivered")}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-transform active:scale-95 cursor-pointer"
+                          >
+                            Marcar Entregado
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FOR NEW MANUAL DELIVERY ORDER */}
+      {showAddOrderModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <h3 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-indigo-600" />
+              Nuevo Envío Manual a Domicilio
+            </h3>
+
+            <form onSubmit={handleCreateDelivery} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Nombre del Cliente *</label>
+                <input
+                  type="text"
+                  value={custName}
+                  onChange={(e) => setCustName(e.target.value)}
+                  placeholder="Ej: María Rodríguez"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Repartidor Mensajero</label>
-                  <select
-                    value={courierName}
-                    onChange={(e) => setCourierName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:bg-white focus:outline-hidden cursor-pointer"
-                  >
-                    <option value="Carlos Motoconcho">Carlos Motoconcho</option>
-                    <option value="Franklin Delivery">Franklin Delivery</option>
-                    <option value="Pedro Express">Pedro Express</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">Monto de Venta ({activeCompany.settings.currency}) *</label>
-                  <input
-                    type="number"
-                    value={orderAmount}
-                    onChange={(e) => setOrderAmount(e.target.value)}
-                    placeholder="Monto total..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden font-mono"
-                    required
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Teléfono de Contacto</label>
+                <input
+                  type="text"
+                  value={custPhone}
+                  onChange={(e) => setCustPhone(e.target.value)}
+                  placeholder="Ej: 809-555-1234"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Notas de Despacho</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Dirección de Entrega *</label>
+                <input
+                  type="text"
+                  value={custAddress}
+                  onChange={(e) => setCustAddress(e.target.value)}
+                  placeholder="Calle, Número, Edificio, Apt..."
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Mensajero / Entregador</label>
+                <select
+                  value={courierName}
+                  onChange={(e) => setCourierName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                >
+                  <option value="Carlos Motoconcho">Carlos Motoconcho</option>
+                  <option value="Franklin Delivery">Franklin Delivery</option>
+                  <option value="Delivery Propio Local">Delivery Propio Local</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Monto a Cobrar ($) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={orderAmount}
+                  onChange={(e) => setOrderAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Notas / Instrucciones especiales</label>
                 <input
                   type="text"
                   value={orderNotes}
                   onChange={(e) => setOrderNotes(e.target.value)}
-                  placeholder="Ej. Llevar cambio de 1000..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:bg-white focus:outline-hidden"
+                  placeholder="Ej: Cobrar con verifone, tocar timbre"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
 
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-colors mt-2"
-              >
-                Registrar Delivery Activo
-              </button>
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddOrderModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer"
+                >
+                  Guardar Orden
+                </button>
+              </div>
             </form>
           </div>
         </div>
