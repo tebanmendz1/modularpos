@@ -1628,22 +1628,44 @@ app.get("/api/pwa/businesses", (req, res) => {
 
   const businesses = rawCompanies.map((c: any, idx: number) => {
     const branch = (db.branches || []).find((b: any) => b.companyId === c.id || b.company_id === c.id);
-    const resolvedAddress = c.address || (branch ? branch.address : null) || "Av. Winston Churchill #102, Santo Domingo";
+
+    // Resolve address: company config > branch > meaningful fallback
+    const resolvedAddress =
+      (c.address && c.address.trim() && c.address !== "Av. Winston Churchill #102, Santo Domingo" ? c.address : null) ||
+      (branch && branch.address && branch.address.trim() ? branch.address : null) ||
+      c.address ||
+      "Sin dirección configurada";
+
+    // Resolve logo: use configured logo if it's a valid URL, otherwise UI Avatars with company name
+    const hasValidLogo = c.logo && typeof c.logo === 'string' && c.logo.startsWith("http") && c.logo.length > 10;
+    const logoUrl = hasValidLogo
+      ? c.logo
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || 'R')}&size=200&background=FF385C&color=fff&bold=true&rounded=true`;
+
+    // Check if delivery module is explicitly active for this company
+    const deliveryActive = !!(
+      c.deliveryModuleActive === true ||
+      c.deliveryActive === true ||
+      c.coords ||
+      c.baseDeliveryFee !== undefined
+    );
 
     return {
       id: c.id,
       name: c.name,
-      category: c.plan || "Gourmet & Restaurant",
-      logo: c.logo && c.logo.startsWith("http") ? c.logo : `https://george-fx.github.io/delisty-data/dishes/0${(idx % 5) + 1}.jpg`,
+      category: c.plan || c.category || "Restaurante & Delivery",
+      logo: logoUrl,
       address: resolvedAddress,
       serviceTime: c.serviceTime || "08:00 AM - 11:00 PM",
-      banner: c.banner || `https://george-fx.github.io/delisty-data/offers/0${(idx % 3) + 1}.jpg`,
+      banner: (c.banner && c.banner.startsWith("http"))
+        ? c.banner
+        : `https://george-fx.github.io/delisty-data/offers/0${(idx % 3) + 1}.jpg`,
       rating: c.rating || 4.8,
-      deliveryModuleActive: true,
-      coords: c.coords || [18.4861, -69.9312],
+      deliveryModuleActive: deliveryActive,
+      coords: Array.isArray(c.coords) && c.coords.length === 2 ? c.coords : [18.4861, -69.9312],
       baseDeliveryFee: c.baseDeliveryFee !== undefined ? Number(c.baseDeliveryFee) : 1.5,
       perKmRate: c.perKmRate !== undefined ? Number(c.perKmRate) : 0.75,
-      estimatedTime: "25-35 min"
+      estimatedTime: c.estimatedTime || "25-35 min"
     };
   });
 
