@@ -497,7 +497,7 @@ export default function DeliveryModule({
                 value={cfgLogo}
                 onChange={(e) => setCfgLogo(e.target.value)}
                 placeholder="https://..."
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
               />
             </div>
 
@@ -519,7 +519,7 @@ export default function DeliveryModule({
                 value={cfgAddress}
                 onChange={(e) => setCfgAddress(e.target.value)}
                 placeholder="Av. Winston Churchill #102, Santo Domingo"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
               />
             </div>
 
@@ -550,7 +550,7 @@ export default function DeliveryModule({
                 value={cfgCoords}
                 onChange={(e) => setCfgCoords(e.target.value)}
                 placeholder="18.4861, -69.9312"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-mono bg-white text-slate-900 font-semibold placeholder:text-slate-500"
               />
               <span className="text-[11px] text-slate-400 mt-1 block">
                 Presione &quot;📍 Usar GPS del Dispositivo&quot; o &quot;🗺️ Ajustar Pin en el Mapa&quot; para posicionar manualmente el pin exacto de su restaurante.
@@ -564,7 +564,7 @@ export default function DeliveryModule({
                 value={cfgServiceTime}
                 onChange={(e) => setCfgServiceTime(e.target.value)}
                 placeholder="08:00 AM - 11:00 PM"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
               />
             </div>
 
@@ -576,7 +576,7 @@ export default function DeliveryModule({
                   step="0.5"
                   value={cfgBaseFee}
                   onChange={(e) => setCfgBaseFee(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
                 />
               </div>
 
@@ -587,7 +587,7 @@ export default function DeliveryModule({
                   step="0.25"
                   value={cfgPerKmRate}
                   onChange={(e) => setCfgPerKmRate(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
                 />
               </div>
             </div>

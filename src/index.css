@@ -1,18 +1,26 @@
 @import "tailwindcss";
 
-select {
+input, textarea, select {
   color: #0f172a !important;
   background-color: #ffffff !important;
+  font-weight: 600 !important;
+  -webkit-text-fill-color: #0f172a !important;
 }
 
-option {
+input::placeholder, textarea::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1 !important;
+}
+
+select option {
   color: #0f172a !important;
   background-color: #ffffff !important;
   font-weight: 600 !important;
   padding: 4px 8px !important;
 }
 
-option:checked {
+select option:checked {
   color: #ffffff !important;
   background-color: #2563eb !important;
 }
