@@ -1863,24 +1863,47 @@ app.get("/api/pwa/drivers", (req, res) => {
   return res.json({ success: true, count: drivers.length, drivers });
 });
 
-// 4c. Driver API: Create new delivery driver
+// 4c. Driver API: Create new delivery driver with PWA access credentials
 app.post("/api/pwa/drivers", async (req, res) => {
-  const { name, phone, vehicle } = req.body;
+  const { name, phone, vehicle, email, username, password } = req.body;
   if (!name) return res.status(400).json({ success: false, error: "Nombre del repartidor es requerido" });
 
   const db = readDb();
   if (!db.deliveryDrivers) db.deliveryDrivers = [];
+  if (!db.users) db.users = [];
+
+  const cleanName = name.trim();
+  const driverEmail = (email || username || `${cleanName.toLowerCase().replace(/\s+/g, '')}@pos.com`).trim();
+  const driverUsername = (username || email || cleanName.toLowerCase().replace(/\s+/g, '')).trim();
+  const driverPassword = (password || "123456").trim();
 
   const newDriver = {
     id: "drv_" + Date.now(),
-    name,
-    phone: phone || "",
+    name: cleanName,
+    phone: (phone || "").trim(),
+    email: driverEmail,
+    username: driverUsername,
+    password: driverPassword,
     vehicle: vehicle || "Motocicleta",
     active: true,
     createdAt: new Date().toISOString(),
   };
 
   db.deliveryDrivers.push(newDriver);
+
+  // Also add user record for login authentication
+  db.users.push({
+    id: newDriver.id,
+    name: cleanName,
+    email: driverEmail,
+    username: driverUsername,
+    password: driverPassword,
+    phone: (phone || "").trim(),
+    role: "driver",
+    isDriver: true,
+    active: true
+  });
+
   await writeDb(db);
 
   return res.json({ success: true, message: "Repartidor registrado con éxito", driver: newDriver });

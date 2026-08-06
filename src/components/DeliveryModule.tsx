@@ -6,6 +6,9 @@ interface DriverItem {
   id: string;
   name: string;
   phone: string;
+  email?: string;
+  username?: string;
+  password?: string;
   vehicle?: string;
   active?: boolean;
 }
@@ -34,7 +37,7 @@ export default function DeliveryModule({
   activeBranch,
   onAddAudit
 }: DeliveryModuleProps) {
-  const [activeSubTab, setActiveSubTab] = useState<"active" | "history" | "config">("active");
+  const [activeSubTab, setActiveSubTab] = useState<"active" | "history" | "drivers" | "config">("active");
   const [showAddOrderModal, setShowAddOrderModal] = useState(false);
 
   // Delivery order list state - initial state completely clean with ZERO demo orders
@@ -45,6 +48,8 @@ export default function DeliveryModule({
   const [showAddDriverModal, setShowAddDriverModal] = useState(false);
   const [newDriverName, setNewDriverName] = useState("");
   const [newDriverPhone, setNewDriverPhone] = useState("");
+  const [newDriverEmail, setNewDriverEmail] = useState("");
+  const [newDriverPassword, setNewDriverPassword] = useState("123456");
   const [newDriverVehicle, setNewDriverVehicle] = useState("Motocicleta");
   const [savingDriver, setSavingDriver] = useState(false);
 
@@ -72,12 +77,21 @@ export default function DeliveryModule({
       const res = await fetch("/api/pwa/drivers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newDriverName.trim(), phone: newDriverPhone.trim(), vehicle: newDriverVehicle }),
+        body: JSON.stringify({
+          name: newDriverName.trim(),
+          phone: newDriverPhone.trim(),
+          email: newDriverEmail.trim(),
+          username: newDriverEmail.trim(),
+          password: newDriverPassword.trim() || "123456",
+          vehicle: newDriverVehicle,
+        }),
       });
       if (res.ok) {
         await fetchDrivers();
         setNewDriverName("");
         setNewDriverPhone("");
+        setNewDriverEmail("");
+        setNewDriverPassword("123456");
         setShowAddDriverModal(false);
         onAddAudit("Repartidores", `Nuevo repartidor registrado: ${newDriverName}`);
       }
@@ -583,7 +597,8 @@ export default function DeliveryModule({
                     <th className="p-3">Repartidor</th>
                     <th className="p-3">Teléfono / WhatsApp</th>
                     <th className="p-3">Vehículo</th>
-                    <th className="p-3">Estado PWA</th>
+                    <th className="p-3">🔑 Usuario PWA</th>
+                    <th className="p-3">🔒 Clave PWA</th>
                     <th className="p-3 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -602,9 +617,12 @@ export default function DeliveryModule({
                       <td className="p-3 text-slate-700 font-semibold">
                         {drv.vehicle || "Motocicleta"}
                       </td>
-                      <td className="p-3">
-                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2.5 py-1 rounded-lg">
-                          ✓ Acceso Activo PWA
+                      <td className="p-3 font-mono text-violet-700 font-bold">
+                        {drv.email || drv.username || `${drv.name.toLowerCase().replace(/\s+/g, '')}@pos.com`}
+                      </td>
+                      <td className="p-3 font-mono text-slate-900 font-extrabold">
+                        <span className="bg-slate-100 border border-slate-200 px-2 py-1 rounded-md text-[11px]">
+                          {drv.password || "123456"}
                         </span>
                       </td>
                       <td className="p-3 text-right">
@@ -1161,6 +1179,37 @@ export default function DeliveryModule({
                   <option value="Bicicleta">Bicicleta</option>
                   <option value="Automóvil">Automóvil</option>
                 </select>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <div className="text-[11px] font-extrabold text-violet-700 mb-2 flex items-center gap-1">
+                  📱 Credenciales de Acceso para la PWA del Repartidor
+                </div>
+
+                <div className="space-y-2.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">🔑 Correo / Usuario de Acceso PWA</label>
+                    <input
+                      type="text"
+                      value={newDriverEmail}
+                      onChange={(e) => setNewDriverEmail(e.target.value)}
+                      placeholder="Ej: carlos@pos.com o carlos.ramirez"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">🔒 Contraseña de Acceso PWA *</label>
+                    <input
+                      type="text"
+                      value={newDriverPassword}
+                      onChange={(e) => setNewDriverPassword(e.target.value)}
+                      placeholder="Ej: 123456"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-slate-900 font-semibold placeholder:text-slate-500"
+                      required
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-4">
