@@ -123,15 +123,65 @@ export default function App() {
 
   // Load Database State on Init
   useEffect(() => {
+    const controller = new AbortController();
+    const requestTimeout = window.setTimeout(() => controller.abort(), 8_000);
+    const loadStartupCache = (): boolean => {
+      const cached = localStorage.getItem("pos_db_backup");
+      if (!cached) return false;
+      try {
+        const data = JSON.parse(cached);
+        if (!Array.isArray(data.companies) || data.companies.length === 0) return false;
+        const defaultComp = data.companies[0] as Company;
+        const safeBranches = Array.isArray(data.branches) ? data.branches : [];
+        setCompanies(data.companies);
+        setBranches(safeBranches);
+        setWarehouses(Array.isArray(data.warehouses) ? data.warehouses : []);
+        setUsers(Array.isArray(data.users) ? data.users : []);
+        setProducts(Array.isArray(data.products) ? data.products : []);
+        setSales(Array.isArray(data.sales) ? data.sales : []);
+        setCustomers(Array.isArray(data.customers) ? data.customers : []);
+        setCashSessions(Array.isArray(data.cashSessions) ? data.cashSessions : []);
+        setAuditLogs(Array.isArray(data.auditLogs) ? data.auditLogs : []);
+        setSuppliers(Array.isArray(data.suppliers) ? data.suppliers : []);
+        setPurchaseOrders(Array.isArray(data.purchaseOrders) ? data.purchaseOrders : []);
+        setExpenses(Array.isArray(data.expenses) ? data.expenses : []);
+        setEmployees(Array.isArray(data.employees) ? data.employees : []);
+        setActiveCompany(defaultComp);
+        setActiveBranch(safeBranches.find((branch: Branch) => branch.companyId === defaultComp.id) || safeBranches[0] || null);
+        setCurrentUser(null);
+        if (defaultComp.settings) {
+          setAllowOutOfStock(Boolean(defaultComp.settings.allowOutOfStock));
+          setRequireCustomer(Boolean(defaultComp.settings.requireCustomer));
+          setReceiptMessage(defaultComp.settings.receiptMessage || "");
+        }
+        return true;
+      } catch (cacheError) {
+        console.warn("La copia local de inicio no es vÃ¡lida.", cacheError);
+        localStorage.removeItem("pos_db_backup");
+        return false;
+      }
+    };
     const initDb = async () => {
       try {
         // Read local offline sync queue
         const savedQueue = localStorage.getItem("pos_sync_queue");
         if (savedQueue) setSyncQueue(JSON.parse(savedQueue));
 
-        const response = await fetch("/api/db");
+        // Do not block the interface while the cloud database wakes up.
+        if (loadStartupCache()) {
+          setIsOnline(false);
+          setLoading(false);
+        }
+
+        const response = await fetch("/api/db", {
+          cache: "no-store",
+          signal: controller.signal
+        });
         if (response.ok) {
           const data = await response.json();
+          if (!Array.isArray(data.companies) || data.companies.length === 0) {
+            throw new Error("La base de datos no contiene empresas vÃ¡lidas");
+          }
           setCompanies(data.companies);
           setBranches(data.branches);
           setWarehouses(data.warehouses);
@@ -200,11 +250,16 @@ export default function App() {
           setCurrentUser(null);
         }
       } finally {
+        window.clearTimeout(requestTimeout);
         setLoading(false);
       }
     };
 
-    initDb();
+    void initDb();
+    return () => {
+      window.clearTimeout(requestTimeout);
+      controller.abort();
+    };
   }, []);
 
   // Update active company settings bindings
