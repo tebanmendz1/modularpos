@@ -42,7 +42,8 @@ const FerreteriaModule = React.lazy(() => import("./components/FerreteriaModule"
 const SYNCED_MODULE_STORAGE_PREFIXES = [
   "accounting_", "pos_custom_roles_", "pos_arqueo_reports_", "pos_initial_breakdowns_",
   "pos_movements_", "pos_reconciliations_", "pos_transfers_", "pos_web_orders_",
-  "pos_categories_", "pos_mfg_orders_", "pos_recipes_", "pos_subscriptions_"
+  "pos_categories_", "pos_mfg_orders_", "pos_recipes_", "pos_subscriptions_",
+  "bistro_custom_areas"
 ];
 
 const collectModuleStorage = (): Record<string, string> => {
