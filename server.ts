@@ -6,10 +6,12 @@ import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import { Pool } from "pg";
+import compression from "compression";
 
 dotenv.config();
 
 const app = express();
+app.use(compression({ threshold: 1024 }));
 app.use(express.json({ limit: "12mb" }));
 
 // Enable CORS for PWA and Mobile Clients
@@ -2155,9 +2157,14 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    app.use("/assets", express.static(path.join(distPath, "assets"), {
+      immutable: true,
+      maxAge: "1y"
+    }));
+    app.use(express.static(distPath, { maxAge: "1h" }));
     // Serve HTML entry for SPA routing
     app.get("*", (req, res) => {
+      res.setHeader("Cache-Control", "no-cache");
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

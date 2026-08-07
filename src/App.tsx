@@ -9,35 +9,35 @@ import {
 import Sidebar from "./components/Sidebar";
 import LoginModule from "./components/LoginModule";
 import OfflineIndicator from "./components/OfflineIndicator";
-import POSModule from "./components/POSModule";
-import InventoryModule from "./components/InventoryModule";
-import ReportsModule from "./components/ReportsModule";
-import LoyaltyModule from "./components/LoyaltyModule";
-import CreditModule from "./components/CreditModule";
-import RestaurantModule from "./components/RestaurantModule";
-import ExpensesModule from "./components/ExpensesModule";
-import PurchasesModule from "./components/PurchasesModule";
-import QuotesModule from "./components/QuotesModule";
-
-import FiscalModule from "./components/FiscalModule";
-import PayrollModule from "./components/PayrollModule";
-import DeliveryModule from "./components/DeliveryModule";
-import IntegrationsModule from "./components/IntegrationsModule";
-import AdminModule from "./components/AdminModule";
-import CashAdvanceModule from "./components/CashAdvanceModule";
-import FinancialReportsModule from "./components/FinancialReportsModule";
-import ManufactureModule from "./components/ManufactureModule";
-import ECommerceModule from "./components/ECommerceModule";
-import SubscriptionsModule from "./components/SubscriptionsModule";
-import SuperAdminModule from "./components/SuperAdminModule";
 import PublicStorefront from "./components/PublicStorefront";
-import AndroidMobileAppModule from "./components/AndroidMobileAppModule";
-import AccountingModule from "./components/AccountingModule";
-import FerreteriaModule from "./components/FerreteriaModule";
 import PublicContractPage from "./components/PublicContractPage";
 import BillingNoticeBanner from "./components/BillingNoticeBanner";
 
 import { Company, User, Branch, Warehouse, Product, Sale, Customer, CashSession, AuditLog, SyncQueueItem, Supplier, PurchaseOrder, Expense, Employee, PlanType, isTabAllowedForUser, getAllowedTabsForUser, isDemoCompany, Quote, FerreteriaOrder } from "./types";
+
+const POSModule = React.lazy(() => import("./components/POSModule"));
+const InventoryModule = React.lazy(() => import("./components/InventoryModule"));
+const ReportsModule = React.lazy(() => import("./components/ReportsModule"));
+const LoyaltyModule = React.lazy(() => import("./components/LoyaltyModule"));
+const CreditModule = React.lazy(() => import("./components/CreditModule"));
+const RestaurantModule = React.lazy(() => import("./components/RestaurantModule"));
+const ExpensesModule = React.lazy(() => import("./components/ExpensesModule"));
+const PurchasesModule = React.lazy(() => import("./components/PurchasesModule"));
+const QuotesModule = React.lazy(() => import("./components/QuotesModule"));
+const FiscalModule = React.lazy(() => import("./components/FiscalModule"));
+const PayrollModule = React.lazy(() => import("./components/PayrollModule"));
+const DeliveryModule = React.lazy(() => import("./components/DeliveryModule"));
+const IntegrationsModule = React.lazy(() => import("./components/IntegrationsModule"));
+const AdminModule = React.lazy(() => import("./components/AdminModule"));
+const CashAdvanceModule = React.lazy(() => import("./components/CashAdvanceModule"));
+const FinancialReportsModule = React.lazy(() => import("./components/FinancialReportsModule"));
+const ManufactureModule = React.lazy(() => import("./components/ManufactureModule"));
+const ECommerceModule = React.lazy(() => import("./components/ECommerceModule"));
+const SubscriptionsModule = React.lazy(() => import("./components/SubscriptionsModule"));
+const SuperAdminModule = React.lazy(() => import("./components/SuperAdminModule"));
+const AndroidMobileAppModule = React.lazy(() => import("./components/AndroidMobileAppModule"));
+const AccountingModule = React.lazy(() => import("./components/AccountingModule"));
+const FerreteriaModule = React.lazy(() => import("./components/FerreteriaModule"));
 
 
 
@@ -975,6 +975,12 @@ export default function App() {
   }
 
   return (
+    <React.Suspense fallback={(
+      <div className="h-screen w-screen bg-slate-900 flex flex-col items-center justify-center text-slate-300">
+        <Cpu className="w-10 h-10 text-sky-500 animate-spin mb-3" />
+        <p className="text-xs font-bold uppercase tracking-widest">Abriendo mÃ³dulo...</p>
+      </div>
+    )}>
     <div className="h-screen w-screen overflow-hidden bg-slate-900 flex font-sans" id="applet-viewport">
       
       {/* SIDEBAR NAVIGATION PANEL */}
@@ -1513,5 +1519,6 @@ export default function App() {
 
       </div>
     </div>
+    </React.Suspense>
   );
 }
