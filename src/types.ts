@@ -413,7 +413,7 @@ export interface EmployeeLoan {
 
 export interface SyncQueueItem {
   id: string;
-  type: 'sale' | 'stock_adjust' | 'customer' | 'cash_session' | 'audit';
+  type: 'sale' | 'stock_adjust' | 'customer' | 'cash_session' | 'audit' | 'state_patch';
   companyId: string;
   data: any;
   timestamp: number;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   Building2, UserCheck, ShieldAlert, Cpu, ShoppingCart, 
   Package, BarChart3, Users, Award, Wallet, Truck, 
@@ -39,6 +39,33 @@ const AndroidMobileAppModule = React.lazy(() => import("./components/AndroidMobi
 const AccountingModule = React.lazy(() => import("./components/AccountingModule"));
 const FerreteriaModule = React.lazy(() => import("./components/FerreteriaModule"));
 
+const SYNCED_MODULE_STORAGE_PREFIXES = [
+  "accounting_", "pos_custom_roles_", "pos_arqueo_reports_", "pos_initial_breakdowns_",
+  "pos_movements_", "pos_reconciliations_", "pos_transfers_", "pos_web_orders_",
+  "pos_categories_", "pos_mfg_orders_", "pos_recipes_", "pos_subscriptions_"
+];
+
+const collectModuleStorage = (): Record<string, string> => {
+  const data: Record<string, string> = {};
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key && SYNCED_MODULE_STORAGE_PREFIXES.some(prefix => key.startsWith(prefix))) {
+      const value = localStorage.getItem(key);
+      if (value !== null) data[key] = value;
+    }
+  }
+  return data;
+};
+
+const applyModuleStorage = (data: unknown) => {
+  if (!data || typeof data !== "object") return;
+  for (const [key, value] of Object.entries(data as Record<string, string>)) {
+    if (SYNCED_MODULE_STORAGE_PREFIXES.some(prefix => key.startsWith(prefix)) && typeof value === "string") {
+      localStorage.setItem(key, value);
+    }
+  }
+};
+
 
 
 
@@ -52,6 +79,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncQueue, setSyncQueue] = useState<SyncQueueItem[]>([]);
   const [syncResults, setSyncResults] = useState<any[] | null>(null);
+  const moduleStorageSnapshotRef = useRef("");
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
@@ -146,6 +174,10 @@ export default function App() {
         setPurchaseOrders(Array.isArray(data.purchaseOrders) ? data.purchaseOrders : []);
         setExpenses(Array.isArray(data.expenses) ? data.expenses : []);
         setEmployees(Array.isArray(data.employees) ? data.employees : []);
+        if (Array.isArray(data.quotes)) setQuotes(data.quotes);
+        if (Array.isArray(data.tables)) setRestaurantTables(data.tables);
+        if (Array.isArray(data.ferreteriaOrders)) setFerreteriaOrders(data.ferreteriaOrders);
+        applyModuleStorage(data.moduleData);
         setActiveCompany(defaultComp);
         setActiveBranch(safeBranches.find((branch: Branch) => branch.companyId === defaultComp.id) || safeBranches[0] || null);
         setCurrentUser(null);
@@ -195,6 +227,10 @@ export default function App() {
           setPurchaseOrders(data.purchaseOrders || []);
           setExpenses(data.expenses || []);
           setEmployees(data.employees || []);
+          if (Array.isArray(data.quotes)) setQuotes(data.quotes);
+          if (Array.isArray(data.tables)) setRestaurantTables(data.tables);
+          if (Array.isArray(data.ferreteriaOrders)) setFerreteriaOrders(data.ferreteriaOrders);
+          applyModuleStorage(data.moduleData);
 
           const savedQuotes = localStorage.getItem("pos_quotes");
           if (savedQuotes) setQuotes(JSON.parse(savedQuotes));
@@ -240,6 +276,10 @@ export default function App() {
           setPurchaseOrders(data.purchaseOrders || []);
           setExpenses(data.expenses || []);
           setEmployees(data.employees || []);
+          if (Array.isArray(data.quotes)) setQuotes(data.quotes);
+          if (Array.isArray(data.tables)) setRestaurantTables(data.tables);
+          if (Array.isArray(data.ferreteriaOrders)) setFerreteriaOrders(data.ferreteriaOrders);
+          applyModuleStorage(data.moduleData);
 
           const savedQuotes = localStorage.getItem("pos_quotes");
           if (savedQuotes) setQuotes(JSON.parse(savedQuotes));
@@ -274,10 +314,10 @@ export default function App() {
   // Real-time synchronization between Web Browser, Pake Desktop App, and multi-device sessions
   useEffect(() => {
     const syncDataWithServer = async () => {
-      if (!isOnline) return;
       try {
         const res = await fetch(`/api/db?t=${Date.now()}`, { cache: "no-store" });
         if (res.ok) {
+          setIsOnline(true);
           const data = await res.json();
           if (data && Array.isArray(data.users)) {
             if (Array.isArray(data.companies)) {
@@ -300,10 +340,22 @@ export default function App() {
             if (Array.isArray(data.sales)) {
               setSales((prev) => (JSON.stringify(prev) !== JSON.stringify(data.sales) ? data.sales : prev));
             }
+            if (Array.isArray(data.customers)) setCustomers(prev => JSON.stringify(prev) !== JSON.stringify(data.customers) ? data.customers : prev);
+            if (Array.isArray(data.cashSessions)) setCashSessions(prev => JSON.stringify(prev) !== JSON.stringify(data.cashSessions) ? data.cashSessions : prev);
+            if (Array.isArray(data.auditLogs)) setAuditLogs(prev => JSON.stringify(prev) !== JSON.stringify(data.auditLogs) ? data.auditLogs : prev);
+            if (Array.isArray(data.suppliers)) setSuppliers(prev => JSON.stringify(prev) !== JSON.stringify(data.suppliers) ? data.suppliers : prev);
+            if (Array.isArray(data.purchaseOrders)) setPurchaseOrders(prev => JSON.stringify(prev) !== JSON.stringify(data.purchaseOrders) ? data.purchaseOrders : prev);
+            if (Array.isArray(data.expenses)) setExpenses(prev => JSON.stringify(prev) !== JSON.stringify(data.expenses) ? data.expenses : prev);
+            if (Array.isArray(data.employees)) setEmployees(prev => JSON.stringify(prev) !== JSON.stringify(data.employees) ? data.employees : prev);
+            if (Array.isArray(data.quotes)) setQuotes(prev => JSON.stringify(prev) !== JSON.stringify(data.quotes) ? data.quotes : prev);
+            if (Array.isArray(data.tables)) setRestaurantTables(prev => JSON.stringify(prev) !== JSON.stringify(data.tables) ? data.tables : prev);
+            if (Array.isArray(data.ferreteriaOrders)) setFerreteriaOrders(prev => JSON.stringify(prev) !== JSON.stringify(data.ferreteriaOrders) ? data.ferreteriaOrders : prev);
+            applyModuleStorage(data.moduleData);
             localStorage.setItem("pos_db_backup", JSON.stringify(data));
           }
         }
       } catch (err) {
+        setIsOnline(false);
         console.warn("Real-time background sync notice:", err);
       }
     };
@@ -323,8 +375,6 @@ export default function App() {
 
   // Helper to persist current DB state to server
   const saveDbStateToServer = async (customState?: any) => {
-    if (!isOnline) return;
-
     const stateToSave = {
       companies,
       branches,
@@ -339,8 +389,19 @@ export default function App() {
       purchaseOrders,
       expenses,
       employees,
+      quotes,
+      tables: restaurantTables,
+      ferreteriaOrders,
+      moduleData: collectModuleStorage(),
       ...customState
     };
+
+    localStorage.setItem("pos_db_backup", JSON.stringify(stateToSave));
+
+    if (!isOnline) {
+      queueOfflineItem("state_patch", customState || stateToSave);
+      return;
+    }
 
     try {
       await fetch("/api/db/update", {
@@ -348,14 +409,15 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(stateToSave)
       });
-      localStorage.setItem("pos_db_backup", JSON.stringify(stateToSave));
     } catch (err) {
       console.error("Error al persistir base de datos en el servidor", err);
+      queueOfflineItem("state_patch", customState || stateToSave);
+      setIsOnline(false);
     }
   };
 
   // Helper to add queue item offline
-  const queueOfflineItem = (type: 'sale' | 'customer' | 'cash_session' | 'stock_adjust' | 'audit', data: any) => {
+  const queueOfflineItem = (type: SyncQueueItem['type'], data: any) => {
     const newItem: SyncQueueItem = {
       id: "queue_" + Math.random().toString(36).slice(2, 9),
       type,
@@ -363,9 +425,29 @@ export default function App() {
       data,
       timestamp: Date.now()
     };
-    const updatedQueue = [...syncQueue, newItem];
-    setSyncQueue(updatedQueue);
-    localStorage.setItem("pos_sync_queue", JSON.stringify(updatedQueue));
+    setSyncQueue(current => {
+      const operationKey = data?.uuid || data?.id;
+      if (type === "state_patch") {
+        const existingPatch = current.find(item => item.type === "state_patch");
+        const updatedQueue = existingPatch
+          ? current.map(item => item.id === existingPatch.id ? { ...item, data: { ...item.data, ...data }, timestamp: Date.now() } : item)
+          : [...current, newItem];
+        localStorage.setItem("pos_sync_queue", JSON.stringify(updatedQueue));
+        return updatedQueue;
+      }
+      const alreadyQueued = operationKey && current.some(item =>
+        item.type === type && (item.data?.uuid || item.data?.id) === operationKey
+      );
+      const updatedQueue = alreadyQueued
+        ? (type === "sale" || type === "audit"
+            ? current
+            : current.map(item => item.type === type && (item.data?.uuid || item.data?.id) === operationKey
+              ? { ...item, data, timestamp: Date.now() }
+              : item))
+        : [...current, newItem];
+      localStorage.setItem("pos_sync_queue", JSON.stringify(updatedQueue));
+      return updatedQueue;
+    });
   };
 
   // TRIGGER SYNC DISPATCHER (Online reconnect)
@@ -384,9 +466,15 @@ export default function App() {
         const data = await response.json();
         setSyncResults(data.results);
 
-        // Clear local queue upon synchronization
-        setSyncQueue([]);
-        localStorage.removeItem("pos_sync_queue");
+        // Remove only confirmed operations. Conflicts and rejected items remain
+        // available for inspection/retry instead of being silently discarded.
+        const synchronizedIds = new Set(
+          data.results.filter((item: any) => item.status === "synchronized").map((item: any) => item.id)
+        );
+        const remainingQueue = syncQueue.filter(item => !synchronizedIds.has(item.id));
+        setSyncQueue(remainingQueue);
+        if (remainingQueue.length > 0) localStorage.setItem("pos_sync_queue", JSON.stringify(remainingQueue));
+        else localStorage.removeItem("pos_sync_queue");
 
         // Reload fresh unified db from cloud
         const dbRes = await fetch("/api/db");
@@ -405,6 +493,10 @@ export default function App() {
           setPurchaseOrders(freshDb.purchaseOrders || []);
           setExpenses(freshDb.expenses || []);
           setEmployees(freshDb.employees || []);
+          if (Array.isArray(freshDb.quotes)) setQuotes(freshDb.quotes);
+          if (Array.isArray(freshDb.tables)) setRestaurantTables(freshDb.tables);
+          if (Array.isArray(freshDb.ferreteriaOrders)) setFerreteriaOrders(freshDb.ferreteriaOrders);
+          applyModuleStorage(freshDb.moduleData);
 
           // keep current selects but refer to fresh objects
           if (activeCompany) setActiveCompany(freshDb.companies.find((c: any) => c.id === activeCompany.id));
@@ -439,14 +531,7 @@ export default function App() {
     const updatedLogs = [log, ...auditLogs];
     setAuditLogs(updatedLogs);
 
-    if (isOnline) {
-      saveDbStateToServer({
-        companies, branches, warehouses, users, products, sales, customers, cashSessions,
-        auditLogs: updatedLogs
-      });
-    } else {
-      queueOfflineItem("audit", log);
-    }
+    queueOfflineItem("audit", log);
   };
 
   // ADD SALE (POS Transaction)
@@ -495,17 +580,9 @@ export default function App() {
       setCustomers(updatedCustomers);
     }
 
-    if (isOnline) {
-      saveDbStateToServer({
-        companies, branches, warehouses, users,
-        products: updatedProducts,
-        sales: updatedSales,
-        customers: updatedCustomers,
-        cashSessions, auditLogs
-      });
-    } else {
-      queueOfflineItem("sale", newSale);
-    }
+    // Every sale follows the same idempotent queue online and offline. The
+    // server owns the final inventory/loyalty mutation exactly once.
+    queueOfflineItem("sale", newSale);
   };
 
   // REGISTER CUSTOMER
@@ -513,15 +590,7 @@ export default function App() {
     const updated = [...customers, newCustomer];
     setCustomers(updated);
 
-    if (isOnline) {
-      saveDbStateToServer({
-        companies, branches, warehouses, users, products, sales,
-        customers: updated,
-        cashSessions, auditLogs
-      });
-    } else {
-      queueOfflineItem("customer", newCustomer);
-    }
+    queueOfflineItem("customer", newCustomer);
   };
 
   // CASH SESSION SHIFT OPENING
@@ -529,15 +598,7 @@ export default function App() {
     const updated = [...cashSessions, newSession];
     setCashSessions(updated);
 
-    if (isOnline) {
-      saveDbStateToServer({
-        companies, branches, warehouses, users, products, sales, customers,
-        cashSessions: updated,
-        auditLogs
-      });
-    } else {
-      queueOfflineItem("cash_session", newSession);
-    }
+    queueOfflineItem("cash_session", newSession);
   };
 
   // CASH SESSION TURN CLOSING (ARQUEO)
@@ -556,16 +617,8 @@ export default function App() {
     });
     setCashSessions(updated);
 
-    if (isOnline) {
-      saveDbStateToServer({
-        companies, branches, warehouses, users, products, sales, customers,
-        cashSessions: updated,
-        auditLogs
-      });
-    } else {
-      const closingObj = updated.find((c) => c.id === sessionId);
-      queueOfflineItem("cash_session", closingObj);
-    }
+    const closingObj = updated.find((c) => c.id === sessionId);
+    queueOfflineItem("cash_session", closingObj);
   };
 
   // INTERNAL CASH FLOWS (Deposits/Withdrawals)
@@ -584,13 +637,8 @@ export default function App() {
     });
 
     setCashSessions(updated);
-    if (isOnline) {
-      saveDbStateToServer({
-        companies, branches, warehouses, users, products, sales, customers,
-        cashSessions: updated,
-        auditLogs
-      });
-    }
+    const changedSession = updated.find(cs => cs.companyId === activeCompany?.id && cs.branchId === activeBranch?.id && cs.status === "open");
+    if (changedSession) queueOfflineItem("cash_session", changedSession);
   };
 
   // SUPERADMIN WORKSPACE: PLAN AND LICENSE MANAGER
@@ -649,74 +697,81 @@ export default function App() {
 
   const handleUpdateProductsCatalog = (prods: Product[]) => {
     setProducts(prods);
-    if (isOnline) {
-      saveDbStateToServer({
-        products: prods
-      });
-    }
+    saveDbStateToServer({ products: prods });
   };
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOnline && syncQueue.length > 0 && !isSyncing) void triggerSync();
+  }, [isOnline, syncQueue.length]);
+
+  useEffect(() => {
+    const synchronizeModuleStorage = () => {
+      const moduleData = collectModuleStorage();
+      const snapshot = JSON.stringify(moduleData);
+      if (snapshot === moduleStorageSnapshotRef.current) return;
+      moduleStorageSnapshotRef.current = snapshot;
+      void saveDbStateToServer({ moduleData });
+    };
+    synchronizeModuleStorage();
+    const interval = window.setInterval(synchronizeModuleStorage, 2_000);
+    return () => window.clearInterval(interval);
+  }, [isOnline]);
 
   const handleUpdateUsers = (uList: User[]) => {
     setUsers(uList);
-    if (isOnline) {
-      saveDbStateToServer({ users: uList });
-    }
+    saveDbStateToServer({ users: uList });
   };
 
   const handleUpdateBranches = (bList: Branch[]) => {
     setBranches(bList);
-    if (isOnline) {
-      saveDbStateToServer({ branches: bList });
-    }
+    saveDbStateToServer({ branches: bList });
   };
 
   const handleUpdateWarehouses = (wList: Warehouse[]) => {
     setWarehouses(wList);
-    if (isOnline) {
-      saveDbStateToServer({ warehouses: wList });
-    }
+    saveDbStateToServer({ warehouses: wList });
   };
 
   const handleUpdateCustomersList = (custs: Customer[]) => {
     setCustomers(custs);
-    if (isOnline) {
-      saveDbStateToServer({
-        customers: custs
-      });
-    }
+    saveDbStateToServer({ customers: custs });
   };
 
   const handleUpdateSuppliersList = (sups: Supplier[]) => {
     setSuppliers(sups);
-    if (isOnline) {
-      saveDbStateToServer({ suppliers: sups });
-    }
+    saveDbStateToServer({ suppliers: sups });
   };
 
   const handleUpdatePurchaseOrdersList = (posList: PurchaseOrder[]) => {
     setPurchaseOrders(posList);
-    if (isOnline) {
-      saveDbStateToServer({ purchaseOrders: posList });
-    }
+    saveDbStateToServer({ purchaseOrders: posList });
   };
 
   const handleUpdateExpensesList = (exps: Expense[]) => {
     setExpenses(exps);
-    if (isOnline) {
-      saveDbStateToServer({ expenses: exps });
-    }
+    saveDbStateToServer({ expenses: exps });
   };
 
   const handleUpdateEmployeesList = (empList: Employee[]) => {
     setEmployees(empList);
-    if (isOnline) {
-      saveDbStateToServer({ employees: empList });
-    }
+    saveDbStateToServer({ employees: empList });
   };
 
   const handleUpdateQuotesList = (qts: Quote[]) => {
     setQuotes(qts);
     localStorage.setItem("pos_quotes", JSON.stringify(qts));
+    saveDbStateToServer({ quotes: qts });
   };
 
   const handleUpdateQuoteStatus = (quoteId: string, status: "facturada" | "draft" | "approved" | "expired", saleId?: string) => {
@@ -732,6 +787,7 @@ export default function App() {
     });
     setQuotes(updatedQuotes);
     localStorage.setItem("pos_quotes", JSON.stringify(updatedQuotes));
+    saveDbStateToServer({ quotes: updatedQuotes });
   };
 
   const [ferreteriaOrders, setFerreteriaOrders] = useState<FerreteriaOrder[]>(() => {
@@ -744,17 +800,13 @@ export default function App() {
     const updated = [order, ...ferreteriaOrders];
     setFerreteriaOrders(updated);
     localStorage.setItem("pos_ferreteria_orders", JSON.stringify(updated));
-    if (isOnline) {
-      saveDbStateToServer({ ferreteriaOrders: updated });
-    }
+    saveDbStateToServer({ ferreteriaOrders: updated });
   };
 
   const handleUpdateFerreteriaOrdersList = (orders: FerreteriaOrder[]) => {
     setFerreteriaOrders(orders);
     localStorage.setItem("pos_ferreteria_orders", JSON.stringify(orders));
-    if (isOnline) {
-      saveDbStateToServer({ ferreteriaOrders: orders });
-    }
+    saveDbStateToServer({ ferreteriaOrders: orders });
   };
 
   const handleUpdateFerreteriaOrderStatus = (orderId: string, status: "cobrada" | "cancelada", saleId?: string) => {
@@ -770,9 +822,13 @@ export default function App() {
     });
     setFerreteriaOrders(updated);
     localStorage.setItem("pos_ferreteria_orders", JSON.stringify(updated));
-    if (isOnline) {
-      saveDbStateToServer({ ferreteriaOrders: updated });
-    }
+    saveDbStateToServer({ ferreteriaOrders: updated });
+  };
+
+  const handleUpdateRestaurantTables = (tables: any[]) => {
+    setRestaurantTables(tables);
+    localStorage.setItem("bistro_restaurant_tables_v3", JSON.stringify(tables));
+    saveDbStateToServer({ tables });
   };
 
 
@@ -1118,7 +1174,7 @@ export default function App() {
               onCashInSession={handleCashInSession}
               isOnline={isOnline}
               restaurantTables={restaurantTables}
-              onUpdateTables={setRestaurantTables}
+              onUpdateTables={handleUpdateRestaurantTables}
               activeTableId={activeTableId}
               setActiveTableId={setActiveTableId}
               onNavigateToTab={setActiveTab}

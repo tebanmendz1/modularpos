@@ -61,6 +61,8 @@ interface DbStore {
   employees: any[];
   auditLogs: any[];
   cashSessions: any[];
+  quotes?: any[];
+  ferreteriaOrders?: any[];
   accounts?: any[];
   journalEntries?: any[];
   ecfProviderConfigs?: EcfProviderConfigRecord[];
@@ -69,6 +71,12 @@ interface DbStore {
   platformBillingSettings?: PlatformBillingSettingsRecord;
   platformBillingNotices?: PlatformBillingNoticeRecord[];
   platformContractVariables?: PlatformContractVariablesRecord[];
+  processedSyncIds?: string[];
+  moduleData?: Record<string, string>;
+  deliveryOrders?: any[];
+  deliveryDrivers?: any[];
+  orderRatings?: any[];
+  pwaUsers?: any[];
 }
 
 interface PlatformContractRecord {
@@ -276,6 +284,49 @@ function writeDb(db: DbStore): Promise<void> {
       );
     });
   return postgresWriteQueue;
+}
+
+const SYNC_COLLECTIONS = [
+  "companies", "branches", "warehouses", "users", "products", "sales", "customers",
+  "suppliers", "purchaseOrders", "expenses", "tables", "recipes", "employees", "auditLogs",
+  "cashSessions", "quotes", "ferreteriaOrders", "accounts", "journalEntries",
+  "deliveryOrders", "deliveryDrivers", "orderRatings", "pwaUsers"
+] as const;
+
+function mergeCollection(existing: any[] = [], incoming: any[] = [], collection = ""): any[] {
+  const result = [...existing];
+  const indexByKey = new Map<string, number>();
+  const keysFor = (item: any) => collection === "sales"
+    ? [item?.id ? `id:${item.id}` : "", item?.uuid ? `uuid:${item.uuid}` : ""].filter(Boolean)
+    : [item?.id ? `id:${item.id}` : ""].filter(Boolean);
+  result.forEach((item, index) => {
+    for (const key of keysFor(item)) indexByKey.set(key, index);
+  });
+  for (const item of incoming) {
+    const keys = keysFor(item);
+    if (keys.length === 0) continue;
+    const existingIndex = keys.map(key => indexByKey.get(key)).find(index => index !== undefined);
+    if (existingIndex === undefined) {
+      for (const key of keys) indexByKey.set(key, result.length);
+      result.push(item);
+    } else {
+      result[existingIndex] = { ...result[existingIndex], ...item };
+      for (const key of keys) indexByKey.set(key, existingIndex);
+    }
+  }
+  return result;
+}
+
+function mergeDbState(existing: DbStore, incoming: Partial<DbStore>): DbStore {
+  const merged: any = { ...existing };
+  for (const collection of SYNC_COLLECTIONS) {
+    const next = incoming[collection] as any[] | undefined;
+    if (Array.isArray(next)) merged[collection] = mergeCollection((existing as any)[collection] || [], next, collection);
+  }
+  if (incoming.moduleData && typeof incoming.moduleData === "object") {
+    merged.moduleData = { ...(existing.moduleData || {}), ...incoming.moduleData };
+  }
+  return merged as DbStore;
 }
 
 async function initializeDatabase() {
@@ -546,16 +597,9 @@ app.post("/api/db/update", async (req, res) => {
     return res.status(400).json({ error: "Invalid database structure" });
   }
   const existing = readDb();
-  await writeDb({
-    ...incoming,
-    ecfProviderConfigs: existing.ecfProviderConfigs || [],
-    ecfDocuments: existing.ecfDocuments || [],
-    platformContracts: existing.platformContracts || [],
-    platformBillingSettings: existing.platformBillingSettings || DEFAULT_BILLING_SETTINGS,
-    platformBillingNotices: existing.platformBillingNotices || [],
-    platformContractVariables: existing.platformContractVariables || []
-  });
-  res.json({ message: "Database saved successfully" });
+  const merged = mergeDbState(existing, incoming);
+  await writeDb(merged);
+  res.json({ message: "Database merged successfully", db: safeDbForClient(merged) });
 });
 
 // Update one tenant atomically. This avoids overwriting newer cloud data with a
@@ -969,13 +1013,20 @@ app.post("/api/sync", async (req, res) => {
 
   const db = readDb();
   const results: { id: string; status: string; error?: string }[] = [];
+  db.processedSyncIds = db.processedSyncIds || [];
 
   for (const item of queue) {
     try {
+      if (db.processedSyncIds.includes(item.id)) {
+        results.push({ id: item.id, status: "synchronized" });
+        continue;
+      }
       if (item.type === "sale") {
         const sale = item.data;
         // Check for duplicates
-        const exists = db.sales.some((s) => s.id === sale.id);
+        const exists = db.sales.some((s) =>
+          s.id === sale.id || (sale.uuid && s.uuid === sale.uuid)
+        );
         if (exists) {
           results.push({ id: item.id, status: "synchronized" }); // Already merged
           continue;
@@ -1045,10 +1096,9 @@ app.post("/api/sync", async (req, res) => {
 
       } else if (item.type === "customer") {
         const cust = item.data;
-        const existsIndex = db.customers.findIndex((c) => c.phone === cust.phone || (c.email && c.email === cust.email));
+        const existsIndex = db.customers.findIndex((c) => c.id === cust.id);
         if (existsIndex >= 0) {
-          // Merge customer points or details (Server wins, but merges points)
-          db.customers[existsIndex].points += cust.points || 0;
+          db.customers[existsIndex] = { ...db.customers[existsIndex], ...cust, synced: true };
           results.push({ id: item.id, status: "synchronized" });
         } else {
           cust.synced = true;
@@ -1088,9 +1138,25 @@ app.post("/api/sync", async (req, res) => {
         }
       } else if (item.type === "audit") {
         const audit = item.data;
+        const existingAudit = db.auditLogs.findIndex(entry => entry.id === audit.id);
         audit.synced = true;
-        db.auditLogs.push(audit);
+        if (existingAudit >= 0) db.auditLogs[existingAudit] = { ...db.auditLogs[existingAudit], ...audit };
+        else db.auditLogs.push(audit);
         results.push({ id: item.id, status: "synchronized" });
+      } else if (item.type === "state_patch") {
+        const merged = mergeDbState(db, item.data || {});
+        for (const collection of SYNC_COLLECTIONS) {
+          if (Array.isArray((merged as any)[collection])) (db as any)[collection] = (merged as any)[collection];
+        }
+        db.moduleData = merged.moduleData || db.moduleData;
+        results.push({ id: item.id, status: "synchronized" });
+      } else {
+        results.push({ id: item.id, status: "rejected", error: "Tipo de sincronizaciÃ³n no soportado" });
+      }
+      const itemResult = results[results.length - 1];
+      if (itemResult?.id === item.id && itemResult.status === "synchronized") {
+        db.processedSyncIds.push(item.id);
+        if (db.processedSyncIds.length > 10_000) db.processedSyncIds = db.processedSyncIds.slice(-5_000);
       }
     } catch (err: any) {
       results.push({ id: item.id, status: "rejected", error: err.message || "Error desconocido" });

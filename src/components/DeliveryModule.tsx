@@ -374,8 +374,8 @@ export default function DeliveryModule({
   const historyDeliveries = deliveries.filter((d) => d.status === "delivered" || d.status === "cancelled" || d.status === "canceled");
 
   // Save Delivery Config to POS DB
-  const handleSaveDeliveryConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveDeliveryConfig = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     setSavingCfg(true);
     try {
       const parts = cfgCoords.split(",").map((p) => parseFloat(p.trim()));
@@ -754,7 +754,7 @@ export default function DeliveryModule({
             <div className="pt-4 border-t border-slate-100 flex justify-end">
               <button
                 type="button"
-                onClick={handleSaveBusinessConfig}
+                onClick={handleSaveDeliveryConfig}
                 disabled={savingCfg}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-2"
               >
