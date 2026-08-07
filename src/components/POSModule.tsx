@@ -2483,9 +2483,13 @@ export default function POSModule({
             <div className="bg-white border border-slate-200 shadow-md p-5 rounded-md font-mono text-[10.5px] text-slate-700 w-full max-w-72 leading-relaxed" id="thermal-ticket-layout">
               <div className="text-center font-bold text-xs uppercase tracking-wider border-b border-dashed border-slate-300 pb-2.5 mb-2">
                 {activeCompany.name}
-                <div className="text-[9px] font-normal lowercase italic mt-0.5">rnc: 1-01-23456-7</div>
+                {activeCompany.rnc && (
+                  <div className="text-[9px] font-normal uppercase mt-0.5">RNC: {activeCompany.rnc}</div>
+                )}
                 <div className="text-[9px] font-medium uppercase text-slate-500 mt-1">{activeBranch.name}</div>
-                <div className="text-[8px] font-normal text-slate-400 mt-0.5">{activeBranch.address}</div>
+                {(activeCompany.address || activeBranch.address) && (
+                  <div className="text-[8px] font-normal text-slate-400 mt-0.5">{activeCompany.address || activeBranch.address}</div>
+                )}
               </div>
 
               {completedSale.ncf && (

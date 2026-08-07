@@ -362,7 +362,7 @@ export default function FiscalModule({
         <IndicadorMontoGravado>1</IndicadorMontoGravado>
       </IdDoc>
       <Emisor>
-        <RNC>${activeCompany.rnc || "131804291"}</RNC>
+        <RNC>${activeCompany.rnc || ""}</RNC>
         <RazonSocial>${activeCompany.name.toUpperCase()}</RazonSocial>
         <NombreComercial>${activeCompany.name.toUpperCase()}</NombreComercial>
         <Sucursal>${activeBranch.name.toUpperCase()}</Sucursal>
@@ -1282,7 +1282,7 @@ export default function FiscalModule({
                   <div className="text-center space-y-1">
                     <h4 className="font-black text-slate-900 text-base leading-tight uppercase">{activeCompany.name}</h4>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{activeBranch.name}</p>
-                    <p className="text-[11px] font-bold text-slate-700 font-mono">RNC Emisor: {activeCompany.rnc || "131804291"}</p>
+                    {activeCompany.rnc && <p className="text-[11px] font-bold text-slate-700 font-mono">RNC Emisor: {activeCompany.rnc}</p>}
                     <p className="text-[10px] text-slate-400 font-medium">AV. WINSTON CHURCHILL ESQ. 27 DE FEBRERO, DN</p>
                     <p className="text-[10px] text-slate-400 font-medium">TEL: (809) 555-0199 | SANTO DOMINGO, RD</p>
                   </div>

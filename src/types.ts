@@ -8,6 +8,7 @@ export interface Company {
   id: string;
   name: string;
   rnc?: string;
+  address?: string;
   plan: PlanType;
   logo: string; // Lucide icon name
   color: string; // Tailwind hex or class name

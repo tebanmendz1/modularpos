@@ -123,7 +123,7 @@ export default function SuperAdminModule({
   });
 
   const [editCompanyForm, setEditCompanyForm] = useState({
-    name: "", rnc: "", plan: PlanType.PROFESIONAL, color: "#4f46e5",
+    name: "", rnc: "", address: "", plan: PlanType.PROFESIONAL, color: "#4f46e5",
     maxBranches: 1, maxUsers: 1, maxDevices: 1, currency: "DOP",
     defaultTaxRate: 18, receiptMessage: "", allowOutOfStock: false, requireCustomer: false
   });
@@ -133,6 +133,7 @@ export default function SuperAdminModule({
     setEditCompanyForm({
       name: company.name,
       rnc: company.rnc || "",
+      address: company.address || branches.find(branch => branch.companyId === company.id)?.address || "",
       plan: company.plan,
       color: company.color || "#4f46e5",
       maxBranches: company.maxBranches,
@@ -155,6 +156,7 @@ export default function SuperAdminModule({
         ...editingCompany,
         name: editCompanyForm.name.trim(),
         rnc: editCompanyForm.rnc.trim() || undefined,
+        address: editCompanyForm.address.trim() || undefined,
         plan: editCompanyForm.plan,
         color: editCompanyForm.color,
         maxBranches: editCompanyForm.maxBranches,
@@ -178,6 +180,10 @@ export default function SuperAdminModule({
       if (!response.ok) throw new Error(data.error || "No se pudo actualizar la empresa");
       const updatedCompany = data.company as Company;
       onUpdateCompanies(companies.map(company => company.id === updatedCompany.id ? updatedCompany : company));
+      if (Array.isArray(data.branches)) {
+        const otherBranches = branches.filter(branch => branch.companyId !== updatedCompany.id);
+        onUpdateBranches([...otherBranches, ...data.branches]);
+      }
       onAddAudit("Actualizar Empresa", `Datos de la empresa "${updatedCompany.name}" actualizados y sincronizados con la nube`);
       setEditingCompany(null);
       setAdminNoticeMsg(`Empresa "${updatedCompany.name}" actualizada y sincronizada inmediatamente.`);
@@ -1218,7 +1224,7 @@ export default function SuperAdminModule({
                     >
                       <option value="">-- Seleccione un Inquilino Comercial --</option>
                       {companies.map(c => (
-                        <option key={c.id} value={c.id}>{c.name} (Plan: {c.plan} • RNC: {c.rnc || "N/A"})</option>
+                        <option key={c.id} value={c.id}>{c.name} (Plan: {c.plan}{c.rnc ? ` • RNC: ${c.rnc}` : ""})</option>
                       ))}
                     </select>
                   </div>
@@ -1445,8 +1451,7 @@ export default function SuperAdminModule({
                     <div className="bg-white text-slate-900 rounded-2xl p-5 font-mono text-xs space-y-4 border-2 border-dashed border-slate-300 shadow-inner animate-fade-in" id="printable-ticket-superadmin">
                       <div className="text-center border-b border-dashed border-slate-300 pb-3">
                         <h4 className="font-black text-sm uppercase">FACTURAPOS SOFTWARE PLATFORMS, SRL</h4>
-                        <p className="text-[9px] font-bold text-slate-600">RNC: 1-01-99887-2 • Tel: 809-555-0199</p>
-                        <p className="text-[9px] text-slate-500">Av. Winston Churchill #109, Santo Domingo, RD</p>
+                        {billingSettings.issuerRnc && <p className="text-[9px] font-bold text-slate-600">RNC: {billingSettings.issuerRnc}</p>}
                         <div className="bg-slate-100 p-1 rounded font-bold text-slate-800 text-center text-[10px] my-2">
                           COMPROBANTE PARA REGISTRO DE GASTOS
                         </div>
@@ -1462,7 +1467,7 @@ export default function SuperAdminModule({
                         )}
                         <p><span className="font-bold font-sans">CLIENTE ADQUIRIENTE:</span></p>
                         <p className="font-black text-slate-800 uppercase ml-2">{selectedCompObj?.name}</p>
-                        <p className="ml-2 font-semibold">RNC: {selectedCompObj?.rnc || "N/A"}</p>
+                        {selectedCompObj?.rnc && <p className="ml-2 font-semibold">RNC: {selectedCompObj.rnc}</p>}
                         <p className="ml-2 font-semibold">Licencia: Plan {selectedCompObj?.plan}</p>
                         <p><span className="font-bold">Método Pago:</span> {generatedInvoice.paymentMethod}</p>
                       </div>
@@ -1534,6 +1539,7 @@ export default function SuperAdminModule({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
               <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Nombre del negocio *</span><input required value={editCompanyForm.name} onChange={e => setEditCompanyForm({...editCompanyForm, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold" /></label>
               <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">RNC / NIF</span><input value={editCompanyForm.rnc} onChange={e => setEditCompanyForm({...editCompanyForm, rnc: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold" /></label>
+              <label className="space-y-1.5 md:col-span-2"><span className="text-[11px] font-bold text-slate-700">DirecciÃ³n del negocio</span><input value={editCompanyForm.address} onChange={e => setEditCompanyForm({...editCompanyForm, address: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold" placeholder="Calle, nÃºmero, sector, ciudad" /></label>
               <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Plan</span><select value={editCompanyForm.plan} onChange={e => setEditCompanyForm({...editCompanyForm, plan: e.target.value as PlanType})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"><option value={PlanType.BASICO}>Plan BÃ¡sico</option><option value={PlanType.PROFESIONAL}>Plan Profesional</option><option value={PlanType.EMPRESARIAL}>Plan Empresarial</option></select></label>
               <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Moneda</span><select value={editCompanyForm.currency} onChange={e => setEditCompanyForm({...editCompanyForm, currency: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"><option value="DOP">DOP</option><option value="USD">USD</option><option value="EUR">EUR</option></select></label>
               <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Color de marca</span><input type="color" value={editCompanyForm.color} onChange={e => setEditCompanyForm({...editCompanyForm, color: e.target.value})} className="w-full h-9 bg-slate-50 border border-slate-200 rounded-xl px-2" /></label>

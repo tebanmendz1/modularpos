@@ -585,6 +585,7 @@ app.patch("/api/admin/companies/:companyId", async (req, res) => {
     ...current,
     name,
     rnc: String(body.rnc ?? current.rnc ?? "").trim() || undefined,
+    address: String(body.address ?? current.address ?? "").trim() || undefined,
     plan,
     logo: String(body.logo ?? current.logo ?? "Building2"),
     color: String(body.color ?? current.color ?? "#4f46e5"),
@@ -605,8 +606,20 @@ app.patch("/api/admin/companies/:companyId", async (req, res) => {
   };
 
   db.companies[companyIndex] = updated;
+  if (body.address !== undefined) {
+    const updatedAddress = String(body.address || "").trim();
+    db.branches = db.branches.map(branch => branch.companyId === updated.id
+      ? { ...branch, address: updatedAddress }
+      : branch
+    );
+  }
   await writeDb(db);
-  res.json({ success: true, company: updated, synchronizedAt: updated.updatedAt });
+  res.json({
+    success: true,
+    company: updated,
+    branches: db.branches.filter(branch => branch.companyId === updated.id),
+    synchronizedAt: updated.updatedAt
+  });
 });
 
 // ==========================================================

@@ -1585,7 +1585,7 @@ export default function CashAdvanceModule({
                 <div className="text-center space-y-1">
                   <h2 className="font-extrabold text-sm tracking-tight">{activeCompany.name.toUpperCase()}</h2>
                   <p className="text-[10px] text-slate-500 font-bold leading-tight">{activeBranch.name}</p>
-                  <p className="text-[10px] text-slate-400">RNC: {activeCompany.rnc || "131-09852-4"}</p>
+                  {activeCompany.rnc && <p className="text-[10px] text-slate-400">RNC: {activeCompany.rnc}</p>}
                   <div className="border-t border-dashed border-slate-300 my-2 pt-1 text-[11px] font-black text-slate-700">
                     RESUMEN DE ARQUEO DE CAJA
                   </div>

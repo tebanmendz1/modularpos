@@ -2006,7 +2006,7 @@ export default function RestaurantModule({
 
             <div className="text-center pb-3 border-b border-dashed border-slate-300">
               <h3 className="font-black text-sm uppercase">{activeCompany?.name || "BISTRO GOURMET"}</h3>
-              <p className="text-[9px] font-bold text-slate-600">RNC: 1-01-99887-2</p>
+              {activeCompany?.rnc && <p className="text-[9px] font-bold text-slate-600">RNC: {activeCompany.rnc}</p>}
               <p className="text-[9px] text-slate-500">Tel: 809-555-0199</p>
               <div className="bg-slate-100 p-1 rounded font-bold text-slate-800 text-center text-[10px] my-2 tracking-wide uppercase">
                 *** PRE-CUENTA DE CONSUMO ***
@@ -2103,7 +2103,7 @@ export default function RestaurantModule({
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 max-h-[50vh] overflow-y-auto mb-4 font-mono text-[11px] text-slate-900 leading-snug shadow-inner" id="completed-thermal-receipt-body">
               <div className="text-center pb-3 border-b border-dashed border-slate-400">
                 <h4 className="font-black text-sm uppercase tracking-wide">{activeCompany?.name || "BISTRO GOURMET"}</h4>
-                <p className="text-[10px] font-bold text-slate-600">RNC: 1-01-99887-2</p>
+                {activeCompany?.rnc && <p className="text-[10px] font-bold text-slate-600">RNC: {activeCompany.rnc}</p>}
                 <p className="text-[10px] text-slate-500">TELÉFONO: 809-555-0199</p>
                 <p className="text-[9px] text-slate-400">AV. WINSTON CHURCHILL, SD</p>
                 <p className="text-[10px] text-slate-600 font-bold mt-1 uppercase">Factura de Crédito de Salón</p>

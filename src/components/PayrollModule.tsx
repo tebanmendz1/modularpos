@@ -343,7 +343,7 @@ export default function PayrollModule({
   // Export ACH File for Banks (Popular, Banreservas, BHD)
   const handleExportAchBankFile = () => {
     const lines = [
-      `HEADER|PAYROLL|${activeCompany.name}|RNC-${activeCompany.rnc || "101000000"}|${new Date().toISOString().split("T")[0]}`,
+      `HEADER|PAYROLL|${activeCompany.name}|${activeCompany.rnc ? `RNC-${activeCompany.rnc}` : ""}|${new Date().toISOString().split("T")[0]}`,
       ...currentPayrollList.map((p, idx) => 
         `DET|${idx + 1}|${p.employeeDocument}|${p.employeeName.padEnd(30, ' ')}|${p.bankName}|${p.bankAccount}|${p.netPay.toFixed(2)}|DOP`
       ),
@@ -780,7 +780,7 @@ export default function PayrollModule({
                 <div className="flex justify-between items-start border-b border-slate-200 pb-4">
                   <div>
                     <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">{activeCompany.name}</h3>
-                    <p className="text-xs text-slate-500">RNC: {activeCompany.rnc || "101000000"}</p>
+                    {activeCompany.rnc && <p className="text-xs text-slate-500">RNC: {activeCompany.rnc}</p>}
                     <p className="text-xs text-slate-500 font-bold mt-1">VOLANTE INDIVIDUAL DE PAGO DE NÓMINA</p>
                   </div>
                   <div className="text-right">
