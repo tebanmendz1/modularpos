@@ -225,6 +225,13 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data.users)) {
+            if (Array.isArray(data.companies)) {
+              setCompanies((prev) => (JSON.stringify(prev) !== JSON.stringify(data.companies) ? data.companies : prev));
+              setActiveCompany((current) => current
+                ? data.companies.find((company: Company) => company.id === current.id) || current
+                : current
+              );
+            }
             setUsers((prev) => (JSON.stringify(prev) !== JSON.stringify(data.users) ? data.users : prev));
             if (Array.isArray(data.branches)) {
               setBranches((prev) => (JSON.stringify(prev) !== JSON.stringify(data.branches) ? data.branches : prev));
@@ -238,6 +245,7 @@ export default function App() {
             if (Array.isArray(data.sales)) {
               setSales((prev) => (JSON.stringify(prev) !== JSON.stringify(data.sales) ? data.sales : prev));
             }
+            localStorage.setItem("pos_db_backup", JSON.stringify(data));
           }
         }
       } catch (err) {
@@ -564,6 +572,18 @@ export default function App() {
 
   const handleUpdateCompaniesList = (cList: Company[]) => {
     setCompanies(cList);
+    setActiveCompany((current) => current
+      ? cList.find((company) => company.id === current.id) || current
+      : current
+    );
+    const cached = localStorage.getItem("pos_db_backup");
+    if (cached) {
+      try {
+        localStorage.setItem("pos_db_backup", JSON.stringify({ ...JSON.parse(cached), companies: cList }));
+      } catch {
+        // A damaged cache must not block an already confirmed cloud update.
+      }
+    }
     if (isOnline) {
       saveDbStateToServer({
         forceServerSave: true,

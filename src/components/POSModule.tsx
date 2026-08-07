@@ -428,8 +428,8 @@ export default function POSModule({
       iframe.style.position = "fixed";
       iframe.style.right = "0";
       iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
+      iframe.style.width = "1px";
+      iframe.style.height = "1px";
       iframe.style.border = "0";
       document.body.appendChild(iframe);
     }
@@ -447,16 +447,34 @@ export default function POSModule({
                 size: 80mm auto;
                 margin: 0;
               }
+              html {
+                width: 80mm;
+                margin: 0;
+                padding: 0;
+                background: #fff;
+              }
               body {
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                width: 76mm;
-                margin: 0 auto;
-                padding: 10px 4px;
-                font-size: 13px;
-                line-height: 1.5;
+                box-sizing: border-box;
+                font-family: "Courier New", Courier, monospace;
+                width: 72mm;
+                margin: 0 4mm;
+                padding: 3mm 0;
+                font-size: 10pt;
+                line-height: 1.3;
                 color: #000;
                 background-color: #fff;
-                -webkit-font-smoothing: antialiased;
+                -webkit-font-smoothing: none;
+                text-rendering: geometricPrecision;
+                print-color-adjust: economy;
+                -webkit-print-color-adjust: economy;
+              }
+              *, *::before, *::after {
+                box-sizing: border-box;
+                max-width: 100%;
+                overflow-wrap: anywhere;
+                text-shadow: none !important;
+                filter: none !important;
+                transform: none !important;
               }
               .text-center { text-align: center; }
               .text-right { text-align: right; }
@@ -469,7 +487,8 @@ export default function POSModule({
               .py-2 { padding-top: 8px; padding-bottom: 8px; }
               .my-2 { margin-top: 8px; margin-bottom: 8px; }
               .space-y-1 > * + * { margin-top: 4px; }
-              .flex { display: flex; }
+              .flex { display: flex; min-width: 0; }
+              .flex > * { min-width: 0; }
               .justify-between { justify-content: space-between; }
               .items-start { align-items: flex-start; }
               .gap-1 { gap: 4px; }
@@ -488,8 +507,8 @@ export default function POSModule({
                 border-color: #000 !important; 
               }
               .font-mono { 
-                font-family: Consolas, "SF Mono", Monaco, "Courier New", monospace; 
-                font-weight: bold; 
+                font-family: "Courier New", Courier, monospace;
+                font-weight: 700;
               }
             </style>
           </head>
@@ -1043,8 +1062,8 @@ export default function POSModule({
       iframe.style.position = "fixed";
       iframe.style.right = "0";
       iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
+      iframe.style.width = "1px";
+      iframe.style.height = "1px";
       iframe.style.border = "0";
       document.body.appendChild(iframe);
     }
@@ -1059,16 +1078,23 @@ export default function POSModule({
             <title>Ticket de Arqueo y Cierre de Caja</title>
             <style>
               @page { size: 80mm auto; margin: 0; }
+              html { width: 80mm; margin: 0; padding: 0; background: #fff; }
               body {
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                width: 76mm;
-                margin: 0 auto;
-                padding: 10px 4px;
-                font-size: 13px;
-                line-height: 1.5;
+                box-sizing: border-box;
+                font-family: "Courier New", Courier, monospace;
+                width: 72mm;
+                margin: 0 4mm;
+                padding: 3mm 0;
+                font-size: 10pt;
+                line-height: 1.3;
                 color: #000;
                 background-color: #fff;
+                -webkit-font-smoothing: none;
+                text-rendering: geometricPrecision;
+                print-color-adjust: economy;
+                -webkit-print-color-adjust: economy;
               }
+              *, *::before, *::after { box-sizing: border-box; max-width: 100%; overflow-wrap: anywhere; text-shadow: none !important; filter: none !important; transform: none !important; }
               .text-center { text-align: center; }
               .text-right { text-align: right; }
               .font-bold { font-weight: bold; }
@@ -1078,11 +1104,12 @@ export default function POSModule({
               .border-t { border-top: 1px solid #000; }
               .py-1 { padding-top: 4px; padding-bottom: 4px; }
               .space-y-1 > * + * { margin-top: 4px; }
-              .flex { display: flex; }
+              .flex { display: flex; min-width: 0; }
+              .flex > * { min-width: 0; }
               .justify-between { justify-content: space-between; }
               .text-slate-700, .text-slate-600, .text-slate-500, .text-slate-400 { color: #000 !important; }
               .bg-white { background-color: #fff; }
-              .font-mono { font-family: Consolas, monospace; font-weight: bold; }
+              .font-mono { font-family: "Courier New", Courier, monospace; font-weight: 700; }
             </style>
           </head>
           <body>

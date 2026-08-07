@@ -101,6 +101,8 @@ export default function SuperAdminModule({
 
   // State: Create Company Wizard
   const [showCompanyModal, setShowCompanyModal] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
   const [companyForm, setCompanyForm] = useState({
     name: "",
     rnc: "",
@@ -119,6 +121,74 @@ export default function SuperAdminModule({
     ownerEmail: "propietario@comercio.com",
     ownerPin: "123456"
   });
+
+  const [editCompanyForm, setEditCompanyForm] = useState({
+    name: "", rnc: "", plan: PlanType.PROFESIONAL, color: "#4f46e5",
+    maxBranches: 1, maxUsers: 1, maxDevices: 1, currency: "DOP",
+    defaultTaxRate: 18, receiptMessage: "", allowOutOfStock: false, requireCustomer: false
+  });
+
+  const openCompanyEditor = (company: Company) => {
+    setEditingCompany(company);
+    setEditCompanyForm({
+      name: company.name,
+      rnc: company.rnc || "",
+      plan: company.plan,
+      color: company.color || "#4f46e5",
+      maxBranches: company.maxBranches,
+      maxUsers: company.maxUsers,
+      maxDevices: company.maxDevices,
+      currency: company.settings.currency || "DOP",
+      defaultTaxRate: Number(((company.settings.defaultTaxRate || 0) * 100).toFixed(2)),
+      receiptMessage: company.settings.receiptMessage || "",
+      allowOutOfStock: company.settings.allowOutOfStock,
+      requireCustomer: company.settings.requireCustomer
+    });
+  };
+
+  const handleUpdateCompany = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingCompany || !editCompanyForm.name.trim() || isSavingCompany) return;
+    setIsSavingCompany(true);
+    try {
+      const payload: Company = {
+        ...editingCompany,
+        name: editCompanyForm.name.trim(),
+        rnc: editCompanyForm.rnc.trim() || undefined,
+        plan: editCompanyForm.plan,
+        color: editCompanyForm.color,
+        maxBranches: editCompanyForm.maxBranches,
+        maxUsers: editCompanyForm.maxUsers,
+        maxDevices: editCompanyForm.maxDevices,
+        settings: {
+          ...editingCompany.settings,
+          currency: editCompanyForm.currency,
+          defaultTaxRate: editCompanyForm.defaultTaxRate / 100,
+          receiptMessage: editCompanyForm.receiptMessage,
+          allowOutOfStock: editCompanyForm.allowOutOfStock,
+          requireCustomer: editCompanyForm.requireCustomer
+        }
+      };
+      const response = await fetch(`/api/admin/companies/${encodeURIComponent(editingCompany.id)}`, {
+        method: "PATCH",
+        headers: adminHeaders,
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo actualizar la empresa");
+      const updatedCompany = data.company as Company;
+      onUpdateCompanies(companies.map(company => company.id === updatedCompany.id ? updatedCompany : company));
+      onAddAudit("Actualizar Empresa", `Datos de la empresa "${updatedCompany.name}" actualizados y sincronizados con la nube`);
+      setEditingCompany(null);
+      setAdminNoticeMsg(`Empresa "${updatedCompany.name}" actualizada y sincronizada inmediatamente.`);
+      setShowAdminNoticeModal(true);
+    } catch (error) {
+      setAdminNoticeMsg(error instanceof Error ? error.message : "No se pudo actualizar la empresa");
+      setShowAdminNoticeModal(true);
+    } finally {
+      setIsSavingCompany(false);
+    }
+  };
 
   // State: Search & Filter Companies
   const [companySearchQuery, setCompanySearchQuery] = useState("");
@@ -855,6 +925,14 @@ export default function SuperAdminModule({
                         <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                           <button
                             type="button"
+                            onClick={() => openCompanyEditor(comp)}
+                            className="text-xs bg-indigo-950/60 hover:bg-indigo-900 text-indigo-200 border border-indigo-800 px-3 py-2 rounded-xl font-bold cursor-pointer transition-all flex items-center gap-1.5"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            Editar datos
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => {
                               setInvoiceForm(prev => ({ ...prev, companyId: comp.id }));
                               setActiveTab("facturas");
@@ -1440,6 +1518,45 @@ export default function SuperAdminModule({
           </div>
         )}
       </div>
+
+      {/* MODAL: EDITAR Y SINCRONIZAR EMPRESA */}
+      {editingCompany && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in text-slate-800">
+          <form onSubmit={handleUpdateCompany} className="bg-white rounded-3xl border border-slate-200 p-6 max-w-2xl w-full shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start gap-4">
+              <div>
+                <h3 className="font-bold text-sm uppercase text-slate-900 tracking-wider flex items-center gap-2"><Edit2 className="w-5 h-5 text-indigo-600" /> Editar negocio</h3>
+                <p className="text-xs text-slate-500 mt-1">Los cambios se confirman directamente en la nube y se reflejan en los demás equipos.</p>
+              </div>
+              <button type="button" disabled={isSavingCompany} onClick={() => setEditingCompany(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+              <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Nombre del negocio *</span><input required value={editCompanyForm.name} onChange={e => setEditCompanyForm({...editCompanyForm, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold" /></label>
+              <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">RNC / NIF</span><input value={editCompanyForm.rnc} onChange={e => setEditCompanyForm({...editCompanyForm, rnc: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold" /></label>
+              <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Plan</span><select value={editCompanyForm.plan} onChange={e => setEditCompanyForm({...editCompanyForm, plan: e.target.value as PlanType})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"><option value={PlanType.BASICO}>Plan BÃ¡sico</option><option value={PlanType.PROFESIONAL}>Plan Profesional</option><option value={PlanType.EMPRESARIAL}>Plan Empresarial</option></select></label>
+              <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Moneda</span><select value={editCompanyForm.currency} onChange={e => setEditCompanyForm({...editCompanyForm, currency: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"><option value="DOP">DOP</option><option value="USD">USD</option><option value="EUR">EUR</option></select></label>
+              <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Color de marca</span><input type="color" value={editCompanyForm.color} onChange={e => setEditCompanyForm({...editCompanyForm, color: e.target.value})} className="w-full h-9 bg-slate-50 border border-slate-200 rounded-xl px-2" /></label>
+              <label className="space-y-1.5"><span className="text-[11px] font-bold text-slate-700">Impuesto %</span><input type="number" min="0" max="100" step="0.01" required value={editCompanyForm.defaultTaxRate} onChange={e => setEditCompanyForm({...editCompanyForm, defaultTaxRate: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold" /></label>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {([['maxBranches', 'Sucursales'], ['maxUsers', 'Usuarios'], ['maxDevices', 'Dispositivos']] as const).map(([field, label]) => <label key={field} className="space-y-1"><span className="text-[10px] font-bold text-slate-600">{label}</span><input type="number" min="1" required value={editCompanyForm[field]} onChange={e => setEditCompanyForm({...editCompanyForm, [field]: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs text-center font-bold" /></label>)}
+            </div>
+
+            <label className="space-y-1.5 block"><span className="text-[11px] font-bold text-slate-700">Mensaje del comprobante</span><textarea rows={3} value={editCompanyForm.receiptMessage} onChange={e => setEditCompanyForm({...editCompanyForm, receiptMessage: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" /></label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-semibold"><input type="checkbox" checked={editCompanyForm.allowOutOfStock} onChange={e => setEditCompanyForm({...editCompanyForm, allowOutOfStock: e.target.checked})} /> Permitir ventas sin existencia</label>
+              <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-semibold"><input type="checkbox" checked={editCompanyForm.requireCustomer} onChange={e => setEditCompanyForm({...editCompanyForm, requireCustomer: e.target.checked})} /> Exigir cliente en ventas</label>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+              <button type="button" disabled={isSavingCompany} onClick={() => setEditingCompany(null)} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold">Cancelar</button>
+              <button type="submit" disabled={isSavingCompany} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl text-xs font-extrabold flex items-center gap-2"><Settings className={`w-4 h-4 ${isSavingCompany ? 'animate-spin' : ''}`} />{isSavingCompany ? "Sincronizando..." : "Guardar y sincronizar"}</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* MODAL: REGISTRAR EMPRESA INQUILINA */}
       {showCompanyModal && (

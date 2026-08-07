@@ -15,8 +15,8 @@ app.use(express.json({ limit: "12mb" }));
 // Enable CORS for PWA and Mobile Clients
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-User-Id");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
@@ -554,6 +554,59 @@ app.post("/api/db/update", async (req, res) => {
     platformContractVariables: existing.platformContractVariables || []
   });
   res.json({ message: "Database saved successfully" });
+});
+
+// Update one tenant atomically. This avoids overwriting newer cloud data with a
+// complete browser snapshot and makes SuperAdmin changes visible immediately.
+app.patch("/api/admin/companies/:companyId", async (req, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const db = readDb();
+  const companyIndex = db.companies.findIndex(item => item.id === req.params.companyId);
+  if (companyIndex < 0) return res.status(404).json({ error: "Empresa no encontrada" });
+
+  const current = db.companies[companyIndex];
+  const body = req.body || {};
+  const name = String(body.name ?? current.name).trim();
+  const allowedPlans = ["BÃ¡sico", "Profesional", "Empresarial"];
+  const plan = String(body.plan ?? current.plan);
+  const positiveInteger = (value: unknown, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  };
+  const taxRate = Number(body.settings?.defaultTaxRate ?? current.settings?.defaultTaxRate ?? 0.18);
+
+  if (!name) return res.status(400).json({ error: "El nombre de la empresa es obligatorio" });
+  if (!allowedPlans.includes(plan)) return res.status(400).json({ error: "Plan de suscripciÃ³n no vÃ¡lido" });
+  if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 1) {
+    return res.status(400).json({ error: "La tasa de impuesto debe estar entre 0 y 100%" });
+  }
+
+  const updated = {
+    ...current,
+    name,
+    rnc: String(body.rnc ?? current.rnc ?? "").trim() || undefined,
+    plan,
+    logo: String(body.logo ?? current.logo ?? "Building2"),
+    color: String(body.color ?? current.color ?? "#4f46e5"),
+    maxBranches: positiveInteger(body.maxBranches, current.maxBranches),
+    maxUsers: positiveInteger(body.maxUsers, current.maxUsers),
+    maxDevices: positiveInteger(body.maxDevices, current.maxDevices),
+    activeModules: Array.isArray(body.activeModules)
+      ? [...new Set(body.activeModules.map(String))]
+      : current.activeModules,
+    settings: {
+      ...current.settings,
+      ...(body.settings || {}),
+      defaultTaxRate: taxRate,
+      currency: String(body.settings?.currency ?? current.settings?.currency ?? "DOP"),
+      receiptMessage: String(body.settings?.receiptMessage ?? current.settings?.receiptMessage ?? "")
+    },
+    updatedAt: new Date().toISOString()
+  };
+
+  db.companies[companyIndex] = updated;
+  await writeDb(db);
+  res.json({ success: true, company: updated, synchronizedAt: updated.updatedAt });
 });
 
 // ==========================================================
